@@ -56,8 +56,9 @@ Delete:
 
 Resulting routes:
 
-- `/` — projects list (current `app/projects/page.tsx` content).
-- `/editor?id=<projectId>` — editor; reads the ID via `useSearchParams` instead of `useParams`. All navigation to the editor is updated accordingly.
+- `/` — client-side redirect to `/projects` (projects list, unchanged).
+- `/editor/?id=<projectId>` — editor; reads the ID via `useSearchParams` (inside `Suspense`) instead of `useParams`. All navigation to the editor goes through a `getEditorUrl({ projectId })` helper.
+- `trailingSlash: true` so routes export as `<route>/index.html`.
 
 ### 3. Static export
 
