@@ -13,6 +13,7 @@ export type BlurBackgroundNodeParams = {
 	trimEnd: number;
 	retime?: RetimeConfig;
 	blurIntensity: number;
+	visibleRange?: { start: number; end: number };
 };
 
 export type BackdropSource = {

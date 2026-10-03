@@ -15,6 +15,7 @@ import { ImageNode } from "../nodes/image-node";
 import { RootNode } from "../nodes/root-node";
 import { StickerNode } from "../nodes/sticker-node";
 import { renderTextToContext, TextNode } from "../nodes/text-node";
+import { TransitionNode } from "../nodes/transition-node";
 import { VideoNode } from "../nodes/video-node";
 import type { ResolvedVisualSourceNodeState } from "../nodes/visual-node";
 import type {
@@ -87,6 +88,43 @@ async function collectNode({
 				textures,
 			});
 		}
+		return;
+	}
+
+	if (node instanceof TransitionNode) {
+		if (!node.resolved) {
+			return;
+		}
+
+		const fromItems: FrameItemDescriptor[] = [];
+		const toItems: FrameItemDescriptor[] = [];
+		for (const [index, child] of node.params.fromNodes.entries()) {
+			await collectNode({
+				node: child,
+				renderer,
+				path: `${path}:from:${index}`,
+				items: fromItems,
+				textures,
+			});
+		}
+		for (const [index, child] of node.params.toNodes.entries()) {
+			await collectNode({
+				node: child,
+				renderer,
+				path: `${path}:to:${index}`,
+				items: toItems,
+				textures,
+			});
+		}
+
+		items.push({
+			type: "transition",
+			shader: node.params.shader,
+			progress: node.resolved.progress,
+			params: node.params.shaderParams,
+			fromItems,
+			toItems,
+		});
 		return;
 	}
 

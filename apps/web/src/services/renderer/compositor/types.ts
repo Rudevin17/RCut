@@ -23,6 +23,14 @@ export type FrameItemDescriptor =
 	| {
 			type: "sceneEffect";
 			effectPassGroups: EffectPass[][];
+	  }
+	| {
+			type: "transition";
+			shader: string;
+			progress: number;
+			params: number[];
+			fromItems: FrameItemDescriptor[];
+			toItems: FrameItemDescriptor[];
 	  };
 
 export type QuadTransformDescriptor = {

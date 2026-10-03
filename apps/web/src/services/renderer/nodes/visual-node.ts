@@ -16,6 +16,8 @@ export interface VisualNodeParams {
 	blendMode?: BlendMode;
 	effects?: Effect[];
 	masks?: Mask[];
+	/** When set, the node only renders inside [start, end) of timeline time. */
+	visibleRange?: { start: number; end: number };
 }
 
 export interface ResolvedVisualNodeState {

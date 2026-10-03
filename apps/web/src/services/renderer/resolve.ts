@@ -20,6 +20,7 @@ import {
 import { resolveColorAtTime, resolveOpacityAtTime } from "@/animation/values";
 import { resolveTransformAtTime } from "@/rendering/animation-values";
 import { videoCache } from "@/services/video-cache/service";
+import { getTransitionSideTimes } from "@/transitions/timing";
 import type { CanvasRenderer } from "./canvas-renderer";
 import type { AnyBaseNode } from "./nodes/base-node";
 import {
@@ -38,6 +39,10 @@ import {
 import { ImageNode, loadImageSource } from "./nodes/image-node";
 import { StickerNode, loadStickerSource } from "./nodes/sticker-node";
 import { TextNode, type ResolvedTextNodeState } from "./nodes/text-node";
+import {
+	TransitionNode,
+	type ResolvedTransitionNodeState,
+} from "./nodes/transition-node";
 import { VideoNode } from "./nodes/video-node";
 import type {
 	ResolvedVisualNodeState,
@@ -48,7 +53,19 @@ import type {
 type ResolveContext = {
 	renderer: CanvasRenderer;
 	time: number;
+	/** Overrides the clip time used to pick video frames (transition handles). */
+	sourceClipTimeOverride?: number;
 };
+
+function isOutsideVisibleRange({
+	range,
+	time,
+}: {
+	range: { start: number; end: number } | undefined;
+	time: number;
+}): boolean {
+	return range !== undefined && (time < range.start || time >= range.end);
+}
 
 export async function resolveRenderTree({
 	node,
@@ -89,6 +106,8 @@ async function resolveNode({
 		node.resolved = await resolveBlurBackgroundNode({ node, context });
 	} else if (node instanceof EffectLayerNode) {
 		node.resolved = resolveEffectLayerNode({ node, context });
+	} else if (node instanceof TransitionNode) {
+		node.resolved = await resolveTransitionNode({ node, context });
 	}
 
 	await Promise.all(
@@ -143,6 +162,9 @@ function resolveVisualState({
 	if (clipTime < 0 || clipTime >= params.duration) {
 		return null;
 	}
+	if (isOutsideVisibleRange({ range: params.visibleRange, time: context.time })) {
+		return null;
+	}
 
 	const localTime = getElementLocalTime({
 		timelineTime: context.time,
@@ -195,15 +217,20 @@ async function resolveVideoNode({
 	if (clipTime < 0 || clipTime >= node.params.duration) {
 		return null;
 	}
+	if (
+		isOutsideVisibleRange({ range: node.params.visibleRange, time: context.time })
+	) {
+		return null;
+	}
 
 	const sourceTimeTicks =
 		node.params.trimStart +
 		getSourceTimeAtClipTime({
-			clipTime,
+			clipTime: context.sourceClipTimeOverride ?? clipTime,
 			retime: node.params.retime,
 		});
 	const frame = await videoCache.getFrameAt({
-		mediaId: node.params.mediaId,
+		mediaId: node.params.cacheKey ?? node.params.mediaId,
 		file: node.params.file,
 		time: mediaTimeToSeconds({ time: roundMediaTime({ time: sourceTimeTicks }) }),
 	});
@@ -386,8 +413,16 @@ async function resolveBlurBackgroundNode({
 	if (clipTime < 0 || clipTime >= node.params.duration) {
 		return null;
 	}
+	if (
+		isOutsideVisibleRange({ range: node.params.visibleRange, time: context.time })
+	) {
+		return null;
+	}
 
-	const backdropSource = await resolveBackdropSource({ node, clipTime });
+	const backdropSource = await resolveBackdropSource({
+		node,
+		clipTime: context.sourceClipTimeOverride ?? clipTime,
+	});
 	if (!backdropSource) {
 		return null;
 	}
@@ -407,6 +442,48 @@ async function resolveBlurBackgroundNode({
 			}),
 		}),
 	};
+}
+
+async function resolveTransitionNode({
+	node,
+	context,
+}: {
+	node: TransitionNode;
+	context: ResolveContext;
+}): Promise<ResolvedTransitionNodeState | null> {
+	const { planned, fromNodes, toNodes } = node.params;
+	if (context.time < planned.window.start || context.time >= planned.window.end) {
+		for (const child of [...fromNodes, ...toNodes]) {
+			child.resolved = null;
+		}
+		return null;
+	}
+
+	const times = getTransitionSideTimes({ planned, time: context.time });
+	await Promise.all([
+		...fromNodes.map((child) =>
+			resolveNode({
+				node: child,
+				context: {
+					...context,
+					time: times.fromVisualTime,
+					sourceClipTimeOverride: times.fromSourceClipTime,
+				},
+			}),
+		),
+		...toNodes.map((child) =>
+			resolveNode({
+				node: child,
+				context: {
+					...context,
+					time: times.toVisualTime,
+					sourceClipTimeOverride: times.toSourceClipTime,
+				},
+			}),
+		),
+	]);
+
+	return { progress: times.progress };
 }
 
 async function resolveBackdropSource({
