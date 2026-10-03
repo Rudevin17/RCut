@@ -11,6 +11,33 @@ pub const TRANSITION_SHADERS: &[(&str, &str)] = &[
         "glitch-displace",
         include_str!("shaders/glitch_displace.wgsl"),
     ),
+    (
+        "glitch-memories",
+        include_str!("shaders/glitch_memories.wgsl"),
+    ),
+    (
+        "datamosh-strip",
+        include_str!("shaders/datamosh_strip.wgsl"),
+    ),
+    (
+        "parametric-glitch",
+        include_str!("shaders/parametric_glitch.wgsl"),
+    ),
+    ("doom-melt", include_str!("shaders/doom_melt.wgsl")),
+    ("lost-signal", include_str!("shaders/lost_signal.wgsl")),
+    ("tv-static", include_str!("shaders/tv_static.wgsl")),
+    ("pixelize", include_str!("shaders/pixelize.wgsl")),
+    (
+        "block-dissolve",
+        include_str!("shaders/block_dissolve.wgsl"),
+    ),
+    (
+        "rgb-split-slam",
+        include_str!("shaders/rgb_split_slam.wgsl"),
+    ),
+    ("zoom-punch", include_str!("shaders/zoom_punch.wgsl")),
+    ("spin-blur", include_str!("shaders/spin_blur.wgsl")),
+    ("shake-hit", include_str!("shaders/shake_hit.wgsl")),
 ];
 
 pub fn transition_shader_source(body: &str) -> String {
