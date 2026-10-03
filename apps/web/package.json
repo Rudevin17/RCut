@@ -24,6 +24,8 @@
     "@radix-ui/react-separator": "^1.1.8",
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-tooltip": "^1.2.8",
+    "@tauri-apps/api": "~2.12.1",
+    "@tauri-apps/plugin-dialog": "~2.8.0",
     "@types/culori": "^4.0.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
