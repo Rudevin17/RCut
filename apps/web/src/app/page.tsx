@@ -1,21 +1,14 @@
-import { Hero } from "@/components/landing/hero";
-import { Header } from "@/components/header";
-import { Footer } from "@/components/footer";
-import type { Metadata } from "next";
-import { SITE_URL } from "@/site/brand";
+"use client";
 
-export const metadata: Metadata = {
-	alternates: {
-		canonical: SITE_URL,
-	},
-};
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 
-export default async function Home() {
-	return (
-		<div>
-			<Header />
-			<Hero />
-			<Footer />
-		</div>
-	);
+export default function Home() {
+	const router = useRouter();
+
+	useEffect(() => {
+		router.replace("/projects");
+	}, [router]);
+
+	return null;
 }
