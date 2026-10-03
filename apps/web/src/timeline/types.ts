@@ -2,6 +2,7 @@ import type { ElementAnimations } from "@/animation/types";
 import type { Effect } from "@/effects/types";
 import type { Mask } from "@/masks/types";
 import type { ParamValues } from "@/params";
+import type { TrackTransition } from "@/transitions/types";
 import type { MediaTime } from "@/wasm";
 
 export type ElementRef = {
@@ -38,6 +39,7 @@ export interface VideoTrack extends BaseTrack {
 	elements: (VideoElement | ImageElement)[];
 	muted: boolean;
 	hidden: boolean;
+	transitions?: TrackTransition[];
 }
 
 export interface TextTrack extends BaseTrack {
