@@ -27,7 +27,7 @@ import type {
 	TimelineTrack,
 	CreateTimelineElement,
 } from "@/timeline";
-import type { TimelineDragData } from "@/timeline/drag";
+import type { TimelineDragData, TransitionDragData } from "@/timeline/drag";
 import type { MediaAsset } from "@/media/types";
 import type { ProcessedMediaAsset } from "@/media/processing";
 import { roundFrameTime, type MediaTime } from "@/wasm";
@@ -82,10 +82,12 @@ interface TimelineCoords {
 
 // --- Pure helpers ---
 
+type ElementDragData = Exclude<TimelineDragData, TransitionDragData>;
+
 function elementTypeFromDrag({
 	dragData,
 }: {
-	dragData: TimelineDragData;
+	dragData: ElementDragData;
 }): ElementType {
 	switch (dragData.type) {
 		case "text":
@@ -104,7 +106,7 @@ function elementTypeFromDrag({
 function getTargetElementTypesForDrag({
 	dragData,
 }: {
-	dragData: TimelineDragData;
+	dragData: ElementDragData;
 }): string[] | undefined {
 	if (dragData.type === "effect") return dragData.targetElementTypes;
 	if (dragData.type === "media") return dragData.targetElementTypes;
@@ -115,7 +117,7 @@ function getDurationForDrag({
 	dragData,
 	mediaAssets,
 }: {
-	dragData: TimelineDragData;
+	dragData: ElementDragData;
 	mediaAssets: MediaAsset[];
 }): MediaTime {
 	if (dragData.type !== "media") return DEFAULT_NEW_ELEMENT_DURATION;
@@ -203,6 +205,11 @@ export class DragDropController {
 			return;
 		}
 
+		if (dragData.type === "transition") {
+			event.dataTransfer.dropEffect = "none";
+			return;
+		}
+
 		const elementType = elementTypeFromDrag({ dragData });
 		const duration = getDurationForDrag({
 			dragData,
@@ -255,6 +262,7 @@ export class DragDropController {
 
 		try {
 			if (dragData) {
+				if (dragData.type === "transition") return;
 				if (!currentTarget) return;
 				this.executeAssetDrop({ target: currentTarget, dragData });
 				return;
@@ -356,7 +364,7 @@ export class DragDropController {
 		dragData,
 	}: {
 		target: DropTarget;
-		dragData: TimelineDragData;
+		dragData: ElementDragData;
 	}): void {
 		switch (dragData.type) {
 			case "text":
