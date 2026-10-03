@@ -15,6 +15,10 @@ import type { TimelineDragData } from "@/timeline/drag";
 import { cn } from "@/utils/ui";
 import type { MediaTime } from "@/wasm";
 
+// Long labels keep their start and their last characters (e.g. a file extension).
+const LABEL_HEAD_CHARS = 16;
+const LABEL_TAIL_CHARS = 3;
+
 export interface DraggableItemProps {
 	name: string;
 	preview: ReactNode;
@@ -131,8 +135,8 @@ export function DraggableItem({
 							>
 								<span className="sr-only">{name}</span>
 								<span aria-hidden="true">
-									{name.length > 8
-										? `${name.slice(0, 16)}...${name.slice(-3)}`
+									{name.length > LABEL_HEAD_CHARS + LABEL_TAIL_CHARS
+										? `${name.slice(0, LABEL_HEAD_CHARS)}...${name.slice(-LABEL_TAIL_CHARS)}`
 										: name}
 								</span>
 							</span>
