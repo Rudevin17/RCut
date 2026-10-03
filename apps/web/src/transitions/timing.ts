@@ -67,6 +67,7 @@ export function planTrackTransitions({
 		const from = elementsById.get(transition.fromElementId);
 		const to = elementsById.get(transition.toElementId);
 		if (!from || !to) continue;
+		if (("hidden" in from && from.hidden) || ("hidden" in to && to.hidden)) continue;
 
 		const cut = from.startTime + from.duration;
 		if (cut !== to.startTime) continue;

@@ -501,7 +501,7 @@ async function resolveBackdropSource({
 				retime: node.params.retime,
 			});
 		const frame = await videoCache.getFrameAt({
-			mediaId: node.params.mediaId,
+			mediaId: node.params.cacheKey ?? node.params.mediaId,
 			file: node.params.file,
 			time: mediaTimeToSeconds({ time: roundMediaTime({ time: sourceTimeTicks }) }),
 		});

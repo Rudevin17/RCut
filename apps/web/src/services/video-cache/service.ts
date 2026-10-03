@@ -304,24 +304,31 @@ export class VideoCache {
 	}
 
 	clearVideo({ mediaId }: { mediaId: string }): void {
-		const sinkData = this.sinks.get(mediaId);
+		this.clearSink({ key: mediaId });
+		// Transitions between clips of the same file decode the incoming side
+		// on a separate stream (see renderer scene-builder).
+		this.clearSink({ key: `${mediaId}:transition-incoming` });
+	}
+
+	private clearSink({ key }: { key: string }): void {
+		const sinkData = this.sinks.get(key);
 		if (sinkData) {
 			if (sinkData.iterator) {
 				void sinkData.iterator.return();
 			}
 
 			sinkData.input.dispose();
-			this.sinks.delete(mediaId);
+			this.sinks.delete(key);
 		}
 
-		this.initPromises.delete(mediaId);
-		this.frameChain.delete(mediaId);
-		this.seekGenerations.delete(mediaId);
+		this.initPromises.delete(key);
+		this.frameChain.delete(key);
+		this.seekGenerations.delete(key);
 	}
 
 	clearAll(): void {
-		for (const [mediaId] of this.sinks) {
-			this.clearVideo({ mediaId });
+		for (const [key] of this.sinks) {
+			this.clearSink({ key });
 		}
 	}
 

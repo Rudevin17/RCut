@@ -137,6 +137,21 @@ describe("planTrackTransitions", () => {
 		expect(plan.visibleRanges.size).toBe(0);
 	});
 
+	test("skips transitions touching hidden clips", () => {
+		const plan = planTrackTransitions({
+			track: track({
+				elements: [
+					clip({ id: "a", start: 0, duration: 100 }),
+					{ ...clip({ id: "b", start: 100, duration: 100 }), hidden: true },
+				],
+				transitions: [crossfade({ duration: 20 })],
+			}),
+		});
+
+		expect(plan.transitions).toHaveLength(0);
+		expect(plan.visibleRanges.size).toBe(0);
+	});
+
 	test("narrows a clip that has transitions on both ends", () => {
 		const plan = planTrackTransitions({
 			track: track({

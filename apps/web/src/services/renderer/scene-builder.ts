@@ -3,13 +3,18 @@ import type {
 	SceneTracks,
 	TimelineTrack,
 	VideoElement,
+	VideoTrack,
 } from "@/timeline";
 import type { MediaAsset } from "@/media/types";
 import {
 	getTransitionDefinition,
 	getTransitionShaderParams,
 } from "@/transitions/registry";
-import { planTrackTransitions, type TimeRange } from "@/transitions/timing";
+import {
+	planTrackTransitions,
+	type TimeRange,
+	type TrackTransitionPlan,
+} from "@/transitions/timing";
 import { RootNode } from "./nodes/root-node";
 import { VideoNode } from "./nodes/video-node";
 import { ImageNode } from "./nodes/image-node";
@@ -39,6 +44,44 @@ function getVisibleSortedElements({ track }: { track: TimelineTrack }) {
 			if (a.startTime !== b.startTime) return a.startTime - b.startTime;
 			return a.id.localeCompare(b.id);
 		});
+}
+
+/**
+ * Keeps only transitions the renderer can draw, so clips are never hidden
+ * (via visible ranges) for a transition that will not render.
+ */
+function getRenderableTransitionTrack({
+	track,
+	mediaMap,
+}: {
+	track: VideoTrack;
+	mediaMap: Map<string, MediaAsset>;
+}): VideoTrack {
+	const elementsById = new Map(
+		track.elements.map((element) => [element.id, element]),
+	);
+	const isRenderable = ({ elementId }: { elementId: string }): boolean => {
+		const element = elementsById.get(elementId);
+		if (!element || ("hidden" in element && element.hidden)) {
+			return false;
+		}
+		const mediaAsset = mediaMap.get(element.mediaId);
+		return Boolean(
+			mediaAsset?.file &&
+				mediaAsset.url &&
+				mediaAsset.type === element.type,
+		);
+	};
+
+	return {
+		...track,
+		transitions: (track.transitions ?? []).filter(
+			(transition) =>
+				getTransitionDefinition({ type: transition.type }) !== null &&
+				isRenderable({ elementId: transition.fromElementId }) &&
+				isRenderable({ elementId: transition.toElementId }),
+		),
+	};
 }
 
 function createMediaElementNode({
@@ -99,11 +142,13 @@ function createBlurBackgroundNode({
 	mediaAsset,
 	blurIntensity,
 	visibleRange,
+	cacheKey,
 }: {
 	element: VideoElement | ImageElement;
 	mediaAsset: MediaAsset;
 	blurIntensity: number;
 	visibleRange?: TimeRange;
+	cacheKey?: string;
 }): BlurBackgroundNode | null {
 	if (mediaAsset.type !== "video" && mediaAsset.type !== "image") {
 		return null;
@@ -120,6 +165,7 @@ function createBlurBackgroundNode({
 		retime: element.type === "video" ? element.retime : undefined,
 		blurIntensity,
 		visibleRange,
+		cacheKey,
 	});
 }
 
@@ -128,6 +174,7 @@ function buildTrackNodes({
 	mediaMap,
 	canvasSize,
 	isPreview,
+	transitionPlans,
 	mainTrackId,
 	blurIntensity,
 }: {
@@ -135,6 +182,7 @@ function buildTrackNodes({
 	mediaMap: Map<string, MediaAsset>;
 	canvasSize: TCanvasSize;
 	isPreview?: boolean;
+	transitionPlans: Map<string, TrackTransitionPlan>;
 	mainTrackId?: string;
 	blurIntensity: number | null;
 }): AnyBaseNode[] {
@@ -142,7 +190,7 @@ function buildTrackNodes({
 
 	for (const track of tracks) {
 		const elements = getVisibleSortedElements({ track });
-		const plan = track.type === "video" ? planTrackTransitions({ track }) : null;
+		const plan = transitionPlans.get(track.id);
 
 		for (const element of elements) {
 			if (element.type === "effect") {
@@ -249,18 +297,25 @@ function buildTransitionNodes({
 	isPreview,
 	blurIntensity,
 }: {
-	plan: ReturnType<typeof planTrackTransitions>;
+	plan: TrackTransitionPlan;
 	mediaMap: Map<string, MediaAsset>;
 	isPreview?: boolean;
 	blurIntensity: number | null;
 }): TransitionNode[] {
 	const nodes: TransitionNode[] = [];
 
+	// `plan` comes from getRenderableTransitionTrack, so these guards only narrow types.
 	for (const planned of plan.transitions) {
 		const definition = getTransitionDefinition({ type: planned.transition.type });
 		const fromAsset = mediaMap.get(planned.from.mediaId);
 		const toAsset = mediaMap.get(planned.to.mediaId);
-		if (!definition || !fromAsset?.file || !toAsset?.file) {
+		if (
+			!definition ||
+			!fromAsset?.file ||
+			!fromAsset.url ||
+			!toAsset?.file ||
+			!toAsset.url
+		) {
 			continue;
 		}
 
@@ -297,6 +352,7 @@ function buildTransitionNodes({
 						element: planned.to,
 						mediaAsset: toAsset,
 						blurIntensity,
+						cacheKey: toCacheKey,
 					});
 
 		nodes.push(
@@ -394,11 +450,24 @@ export function buildScene({
 			? (background.blurIntensity ?? DEFAULT_BACKGROUND_BLUR_INTENSITY)
 			: null;
 
+	const transitionPlans = new Map<string, TrackTransitionPlan>();
+	for (const track of orderedTracksBottomToTop) {
+		if (track.type === "video") {
+			transitionPlans.set(
+				track.id,
+				planTrackTransitions({
+					track: getRenderableTransitionTrack({ track, mediaMap }),
+				}),
+			);
+		}
+	}
+
 	const allNodes = buildTrackNodes({
 		tracks: orderedTracksBottomToTop,
 		mediaMap,
 		canvasSize,
 		isPreview,
+		transitionPlans,
 		mainTrackId: mainTrack?.id,
 		blurIntensity,
 	});
@@ -409,7 +478,7 @@ export function buildScene({
 			mediaMap,
 			blurIntensity,
 			visibleRanges: mainTrack
-				? planTrackTransitions({ track: mainTrack }).visibleRanges
+				? transitionPlans.get(mainTrack.id)?.visibleRanges
 				: undefined,
 		});
 		for (const node of blurNodes) {

@@ -14,6 +14,8 @@ export type BlurBackgroundNodeParams = {
 	retime?: RetimeConfig;
 	blurIntensity: number;
 	visibleRange?: { start: number; end: number };
+	/** Video frame cache stream key; defaults to `mediaId`. */
+	cacheKey?: string;
 };
 
 export type BackdropSource = {
