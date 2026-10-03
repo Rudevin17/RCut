@@ -29,3 +29,6 @@ rust-migration-notes.md
 # Next.js
 .next/
 out/
+
+# wasm-pack output
+rust/wasm/pkg/
