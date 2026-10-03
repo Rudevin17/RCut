@@ -2,6 +2,7 @@ import type { EditorCore } from "@/core";
 import { toast } from "sonner";
 import type { MediaAsset } from "@/media/types";
 import { storageService } from "@/services/storage/service";
+import type { MissingMediaAsset } from "@/services/storage/types";
 import { generateUUID } from "@/utils/id";
 import { videoCache } from "@/services/video-cache/service";
 import { waveformCache } from "@/services/waveform-cache/service";
@@ -9,6 +10,7 @@ import { BatchCommand, RemoveMediaAssetCommand } from "@/commands";
 
 export class MediaManager {
 	private assets: MediaAsset[] = [];
+	private missingAssets: MissingMediaAsset[] = [];
 	private isLoading = false;
 	private listeners = new Set<() => void>();
 
@@ -89,11 +91,22 @@ export class MediaManager {
 		this.notify();
 
 		try {
-			const mediaAssets = await storageService.loadAllMediaAssets({
+			const { assets, missing } = await storageService.loadAllMediaAssets({
 				projectId,
 			});
-			this.assets = mediaAssets;
+			this.assets = assets;
+			this.missingAssets = missing;
 			this.notify();
+
+			if (missing.length > 0) {
+				toast.warning(
+					`${missing.length} media ${missing.length === 1 ? "file is" : "files are"} missing`,
+					{
+						description:
+							'Use "Locate file" in the Assets panel to find them.',
+					},
+				);
+			}
 		} catch (error) {
 			console.error("Failed to load media assets:", error);
 		} finally {
@@ -114,8 +127,11 @@ export class MediaManager {
 			}
 		});
 
-		const mediaIds = this.assets.map((asset) => asset.id);
+		const mediaIds = [...this.assets, ...this.missingAssets].map(
+			(asset) => asset.id,
+		);
 		this.assets = [];
+		this.missingAssets = [];
 		this.notify();
 
 		try {
@@ -143,11 +159,16 @@ export class MediaManager {
 		});
 
 		this.assets = [];
+		this.missingAssets = [];
 		this.notify();
 	}
 
 	getAssets(): MediaAsset[] {
 		return this.assets;
+	}
+
+	getMissingAssets(): MissingMediaAsset[] {
+		return this.missingAssets;
 	}
 
 	setAssets({ assets }: { assets: MediaAsset[] }): void {

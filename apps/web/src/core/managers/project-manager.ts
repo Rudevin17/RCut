@@ -29,6 +29,7 @@ import { DEFAULTS } from "@/timeline/defaults";
 import { getElementFontFamilies } from "@/timeline/element-utils";
 import { getRaisedProjectFpsForImportedMedia } from "@/fps/utils";
 import type { MediaAsset } from "@/media/types";
+import { toMediaAssetData } from "@/media/linked-media";
 
 export interface MigrationState {
 	isMigrating: boolean;
@@ -453,18 +454,25 @@ export class ProjectManager {
 
 			await Promise.all(
 				duplicationPlans.map(async ({ sourceProjectId, newProjectId }) => {
-					const sourceMediaAssets = await storageService.loadAllMediaAssets({
-						projectId: sourceProjectId,
-					});
+					const { assets: sourceMediaAssets, missing: sourceMissingAssets } =
+						await storageService.loadAllMediaAssets({
+							projectId: sourceProjectId,
+						});
 
-					await Promise.all(
-						sourceMediaAssets.map((mediaAsset) =>
+					await Promise.all([
+						...sourceMediaAssets.map((mediaAsset) =>
 							storageService.saveMediaAsset({
 								projectId: newProjectId,
 								mediaAsset,
 							}),
 						),
-					);
+						...sourceMissingAssets.map((missingAsset) =>
+							storageService.saveMediaAssetMetadata({
+								projectId: newProjectId,
+								metadata: toMediaAssetData({ missingAsset }),
+							}),
+						),
+					]);
 				}),
 			);
 

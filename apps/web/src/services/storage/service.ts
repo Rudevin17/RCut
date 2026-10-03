@@ -3,6 +3,7 @@ import { getProjectDurationFromScenes } from "@/timeline/scenes";
 import type { MediaAsset } from "@/media/types";
 import { IndexedDBAdapter } from "./indexeddb-adapter";
 import { OPFSAdapter } from "./opfs-adapter";
+import { openLinkedFile } from "@/services/linked-files";
 import {
 	type StorageCapacityCheckResult,
 	StorageQuotaExceededError,
@@ -12,6 +13,7 @@ import {
 } from "./quota";
 import type {
 	MediaAssetData,
+	MissingMediaAsset,
 	StorageConfig,
 	SerializedProject,
 	SerializedScene,
@@ -296,13 +298,17 @@ class StorageService {
 			duration: mediaAsset.duration,
 			thumbnailUrl: mediaAsset.thumbnailUrl,
 			ephemeral: mediaAsset.ephemeral,
+			sourcePath: mediaAsset.sourcePath,
 		};
 
 		try {
-			await mediaAssetsAdapter.set({
-				key: mediaAsset.id,
-				value: mediaAsset.file,
-			});
+			// Linked assets stay where they are on disk; only metadata is stored.
+			if (!mediaAsset.sourcePath) {
+				await mediaAssetsAdapter.set({
+					key: mediaAsset.id,
+					value: mediaAsset.file,
+				});
+			}
 			await mediaMetadataAdapter.set({
 				key: mediaAsset.id,
 				value: metadata,
@@ -324,22 +330,61 @@ class StorageService {
 		}
 	}
 
+	async saveMediaAssetMetadata({
+		projectId,
+		metadata,
+	}: {
+		projectId: string;
+		metadata: MediaAssetData;
+	}): Promise<void> {
+		const { mediaMetadataAdapter } = this.getProjectMediaAdapters({
+			projectId,
+		});
+		await mediaMetadataAdapter.set({ key: metadata.id, value: metadata });
+	}
+
 	async loadMediaAsset({
 		projectId,
 		id,
 	}: {
 		projectId: string;
 		id: string;
-	}): Promise<MediaAsset | null> {
+	}): Promise<
+		| { kind: "loaded"; asset: MediaAsset }
+		| { kind: "missing"; asset: MissingMediaAsset }
+		| null
+	> {
 		const { mediaMetadataAdapter, mediaAssetsAdapter } =
 			this.getProjectMediaAdapters({ projectId });
 
-		const [file, metadata] = await Promise.all([
-			mediaAssetsAdapter.get(id),
-			mediaMetadataAdapter.get(id),
-		]);
+		const metadata = await mediaMetadataAdapter.get(id);
+		if (!metadata) return null;
 
-		if (!file || !metadata) return null;
+		if (metadata.sourcePath) {
+			const result = await openLinkedFile({ path: metadata.sourcePath });
+			if (result.status !== "ok") {
+				return {
+					kind: "missing",
+					asset: {
+						...metadata,
+						sourcePath: metadata.sourcePath,
+						reason: result.status,
+					},
+				};
+			}
+
+			return {
+				kind: "loaded",
+				asset: this.toMediaAsset({
+					metadata,
+					file: result.file,
+					url: URL.createObjectURL(result.file),
+				}),
+			};
+		}
+
+		const file = await mediaAssetsAdapter.get(id);
+		if (!file) return null;
 
 		let url: string;
 		if (metadata.type === "image" && (!file.type || file.type === "")) {
@@ -359,6 +404,21 @@ class StorageService {
 		}
 
 		return {
+			kind: "loaded",
+			asset: this.toMediaAsset({ metadata, file, url }),
+		};
+	}
+
+	private toMediaAsset({
+		metadata,
+		file,
+		url,
+	}: {
+		metadata: MediaAssetData;
+		file: File;
+		url: string;
+	}): MediaAsset {
+		return {
 			id: metadata.id,
 			name: metadata.name,
 			type: metadata.type,
@@ -369,6 +429,7 @@ class StorageService {
 			duration: metadata.duration,
 			thumbnailUrl: metadata.thumbnailUrl,
 			ephemeral: metadata.ephemeral,
+			sourcePath: metadata.sourcePath,
 		};
 	}
 
@@ -376,22 +437,22 @@ class StorageService {
 		projectId,
 	}: {
 		projectId: string;
-	}): Promise<MediaAsset[]> {
+	}): Promise<{ assets: MediaAsset[]; missing: MissingMediaAsset[] }> {
 		const { mediaMetadataAdapter } = this.getProjectMediaAdapters({
 			projectId,
 		});
 
 		const mediaIds = await mediaMetadataAdapter.list();
-		const mediaItems: MediaAsset[] = [];
+		const assets: MediaAsset[] = [];
+		const missing: MissingMediaAsset[] = [];
 
 		for (const id of mediaIds) {
-			const item = await this.loadMediaAsset({ projectId, id });
-			if (item) {
-				mediaItems.push(item);
-			}
+			const result = await this.loadMediaAsset({ projectId, id });
+			if (result?.kind === "loaded") assets.push(result.asset);
+			if (result?.kind === "missing") missing.push(result.asset);
 		}
 
-		return mediaItems;
+		return { assets, missing };
 	}
 
 	async deleteMediaAsset({

@@ -27,6 +27,12 @@ export interface MediaAssetData {
 	hasAudio?: boolean;
 	ephemeral?: boolean;
 	thumbnailUrl?: string;
+	sourcePath?: string;
+}
+
+export interface MissingMediaAsset extends MediaAssetData {
+	sourcePath: string;
+	reason: "missing" | "error";
 }
 
 export type SerializedScene = Omit<TScene, "createdAt" | "updatedAt"> & {
