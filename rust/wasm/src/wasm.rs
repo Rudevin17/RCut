@@ -8,6 +8,8 @@ mod gpu;
 mod masks;
 #[cfg(target_arch = "wasm32")]
 mod perf;
+#[cfg(target_arch = "wasm32")]
+mod transitions;
 
 #[cfg(target_arch = "wasm32")]
 pub use compositor::*;
@@ -20,3 +22,5 @@ pub use masks::*;
 #[cfg(target_arch = "wasm32")]
 pub use perf::*;
 pub use time::*;
+#[cfg(target_arch = "wasm32")]
+pub use transitions::*;

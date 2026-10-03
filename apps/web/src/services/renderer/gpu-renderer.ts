@@ -1,6 +1,7 @@
 import {
 	applyEffectPasses,
 	applyMaskFeather as applyMaskFeatherWasm,
+	applyTransition as applyTransitionWasm,
 	initializeGpu,
 } from "opencut-wasm";
 import type { EffectPass, EffectUniformValue } from "@/effects/types";
@@ -28,6 +29,29 @@ export function isGpuAvailable(): boolean {
 }
 
 export const gpuRenderer = {
+	applyTransition({
+		from,
+		to,
+		width,
+		height,
+		shader,
+		progress,
+		params,
+	}: {
+		from: OffscreenCanvas;
+		to: OffscreenCanvas;
+		width: number;
+		height: number;
+		shader: string;
+		progress: number;
+		params: number[];
+	}): OffscreenCanvas | null {
+		if (!gpuAvailable) {
+			return null;
+		}
+		return applyTransitionWasm({ from, to, width, height, shader, progress, params });
+	},
+
 	applyEffect({
 		source,
 		width,

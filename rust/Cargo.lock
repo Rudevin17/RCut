@@ -622,6 +622,7 @@ dependencies = [
  "serde",
  "serde-wasm-bindgen",
  "time",
+ "transitions",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",

@@ -7,12 +7,14 @@ use gpu::{GpuContext, wgpu};
 use js_sys::{Object, Reflect};
 use masks::MaskFeatherPipeline;
 use serde::Deserialize;
+use transitions::TransitionPipeline;
 use wasm_bindgen::{JsCast, JsValue, prelude::wasm_bindgen};
 
 pub(crate) struct GpuRuntime {
     pub(crate) context: GpuContext,
     pub(crate) effects: EffectPipeline,
     pub(crate) masks: MaskFeatherPipeline,
+    pub(crate) transitions: TransitionPipeline,
 }
 
 thread_local! {
@@ -50,12 +52,14 @@ pub async fn initialize_gpu() -> Result<(), JsValue> {
         .map_err(|error| JsValue::from_str(&error.to_string()))?;
     let effects = EffectPipeline::new(&context);
     let masks = MaskFeatherPipeline::new(&context);
+    let transitions = TransitionPipeline::new(&context);
 
     GPU_RUNTIME.with(|runtime| {
         runtime.replace(Some(GpuRuntime {
             context,
             effects,
             masks,
+            transitions,
         }));
     });
 
