@@ -88,7 +88,7 @@ All page↔host messages are JSON with a `type` field prefixed `rcut:`.
   - Otherwise it behaves as today.
 - `loadAllMediaAssets` returns `{ assets: MediaAsset[]; missing: MissingMediaAsset[] }`, where `MissingMediaAsset = MediaAssetData & { sourcePath: string; reason: "missing" | "error" }`. Its callers (media manager, project duplication) are updated. Project duplication also re-saves missing assets' metadata.
 - `deleteMediaAsset` / `deleteProjectMedia` for linked assets remove metadata only, and never call anything that could touch the original path.
-- New `updateMediaAssetLink({ projectId, id, sourcePath, size, lastModified })` for relink.
+- New `saveMediaAssetMetadata({ projectId, metadata })` (metadata-only write), used by relink and by duplicating missing assets.
 
 ### 4. Import — `apps/web/src/media/processing.ts`
 
@@ -100,7 +100,7 @@ All page↔host messages are JSON with a `type` field prefixed `rcut:`.
 ### 5. Media manager + UI
 
 - `MediaManager` gains `missingAssets: MissingMediaAsset[]`, `getMissingAssets()`, and `relinkMediaAsset({ projectId, id, file }): Promise<void>`.
-- `relinkMediaAsset` resolves the picked file's path, checks the media type matches, calls `openLinkedFile`, persists via `updateMediaAssetLink`, moves the asset into `assets`, and notifies.
+- `relinkMediaAsset` resolves the picked file's path, checks the media type matches, calls `openLinkedFile`, persists via `saveMediaAssetMetadata`, moves the asset into `assets`, and notifies.
 - `loadProjectMedia` fills both lists and shows a toast when `missing.length > 0`.
 - Media panel (`components/editor/panels/assets/views/assets.tsx`): renders missing items after loaded ones, with a "Missing" badge, the original path as a tooltip, and a "Locate file" button. The button opens a hidden `<input type="file">` and calls `relinkMediaAsset`.
 
@@ -119,7 +119,7 @@ All page↔host messages are JSON with a `type` field prefixed `rcut:`.
 - **Unit (`bun:test`):**
   - bridge request/response correlation, timeout, and ignoring unrelated messages (fake transport);
   - `planMediaImport`;
-  - `MediaManager` missing/relink state transitions with a stubbed storage/linked-files layer.
+  - pure linked-media helpers (`planMediaImport`, `isRelinkCompatible`, `applyRelinkedAsset`, `toMediaAssetData`) that carry the import and relink state logic.
 - **Manual (in `rcut.exe`):**
   1. Import the 19 GB recording via the button and via drag.
   2. Edit it, close, and reopen: the project and edits are intact.
