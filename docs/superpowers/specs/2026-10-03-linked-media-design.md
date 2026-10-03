@@ -65,7 +65,7 @@ All page↔host messages are JSON with a `type` field prefixed `rcut:`.
   - If `path` does not exist or is not a file, host → page: `PostWebMessageAsJson({ type: "rcut:linked-file", requestId, status: "missing" })`.
   - Otherwise the host creates a read-only handle and sends `PostWebMessageAsJsonWithAdditionalObjects({ type: "rcut:linked-file", requestId, status: "ok" }, [handle])`.
   - On COM failure (e.g. an older runtime without `ICoreWebView2Environment14`), it sends `status: "error"` with a `message`.
-- Registered from `main.rs` in `.setup()` and `invoke_handler`. On non-Windows targets the module compiles to nothing; macOS/Linux are non-goals.
+- Registered from `main.rs` in `.setup()` and `invoke_handler`. The desktop crate is Windows-only; macOS/Linux are non-goals.
 
 ### 2. Web bridge — `apps/web/src/services/linked-files/`
 
