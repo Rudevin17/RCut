@@ -122,3 +122,21 @@ export function getTransitionSideTimes({
 		toSourceClipTime: Math.max(time - to.startTime, -toHandle),
 	};
 }
+
+/**
+ * Before a transition starts, the incoming side's source position, used to warm its
+ * decode stream. Returns null outside [window.start - leadTime, window.start).
+ */
+export function getTransitionPrewarmTimes({
+	planned,
+	time,
+	leadTime,
+}: {
+	planned: PlannedTransition;
+	time: number;
+	leadTime: number;
+}): { toVisualTime: number; toSourceClipTime: number } | null {
+	const { window, to, toHandle } = planned;
+	if (time < window.start - leadTime || time >= window.start) return null;
+	return { toVisualTime: to.startTime, toSourceClipTime: -toHandle };
+}

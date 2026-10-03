@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { VideoElement, VideoTrack } from "@/timeline";
 import type { MediaTime } from "@/wasm";
 import {
+	getTransitionPrewarmTimes,
 	getTransitionSideTimes,
 	planTrackTransitions,
 } from "@/transitions/timing";
@@ -215,5 +216,44 @@ describe("getTransitionSideTimes", () => {
 		// `b` has 10 ticks of pre-roll available (capped at half the window).
 		expect(early.toSourceClipTime).toBe(-8);
 		expect(early.fromSourceClipTime).toBe(92);
+	});
+});
+
+describe("getTransitionPrewarmTimes", () => {
+	const [planned] = planTrackTransitions({
+		track: track({
+			elements: [
+				clip({ id: "a", start: 0, duration: 100, trimEnd: 4 }),
+				clip({ id: "b", start: 100, duration: 100, trimStart: 50 }),
+			],
+			transitions: [crossfade({ duration: 20 })],
+		}),
+	}).transitions;
+
+	test("is null well before the lead time", () => {
+		expect(getTransitionPrewarmTimes({ planned, time: 50, leadTime: 20 })).toBeNull();
+	});
+
+	test("returns the incoming start position inside the lead time", () => {
+		expect(getTransitionPrewarmTimes({ planned, time: 75, leadTime: 20 })).toEqual({
+			toVisualTime: 100,
+			toSourceClipTime: -10,
+		});
+	});
+
+	test("includes the exact lead boundary", () => {
+		expect(getTransitionPrewarmTimes({ planned, time: 70, leadTime: 20 })).not.toBeNull();
+	});
+
+	test("is null at window start and inside the window", () => {
+		expect(getTransitionPrewarmTimes({ planned, time: 90, leadTime: 20 })).toBeNull();
+		expect(getTransitionPrewarmTimes({ planned, time: 100, leadTime: 20 })).toBeNull();
+	});
+
+	test("matches the incoming side times at window start", () => {
+		const prewarm = getTransitionPrewarmTimes({ planned, time: 80, leadTime: 20 });
+		const atStart = getTransitionSideTimes({ planned, time: planned.window.start });
+		expect(prewarm?.toVisualTime).toBe(atStart.toVisualTime);
+		expect(prewarm?.toSourceClipTime).toBe(atStart.toSourceClipTime);
 	});
 });

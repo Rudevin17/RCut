@@ -1,4 +1,4 @@
-import { mediaTimeToSeconds, roundMediaTime } from "@/wasm";
+import { mediaTimeToSeconds, roundMediaTime, TICKS_PER_SECOND } from "@/wasm";
 import { getElementLocalTime } from "@/animation";
 import { resolveEffectParamsAtTime } from "@/animation/effect-param-channel";
 import {
@@ -20,7 +20,10 @@ import {
 import { resolveColorAtTime, resolveOpacityAtTime } from "@/animation/values";
 import { resolveTransformAtTime } from "@/rendering/animation-values";
 import { videoCache } from "@/services/video-cache/service";
-import { getTransitionSideTimes } from "@/transitions/timing";
+import {
+	getTransitionPrewarmTimes,
+	getTransitionSideTimes,
+} from "@/transitions/timing";
 import type { CanvasRenderer } from "./canvas-renderer";
 import type { AnyBaseNode } from "./nodes/base-node";
 import {
@@ -49,6 +52,8 @@ import type {
 	ResolvedVisualSourceNodeState,
 	VisualNodeParams,
 } from "./nodes/visual-node";
+
+const TRANSITION_PREWARM_SECONDS = 1;
 
 type ResolveContext = {
 	renderer: CanvasRenderer;
@@ -455,6 +460,29 @@ async function resolveTransitionNode({
 	if (context.time < planned.window.start || context.time >= planned.window.end) {
 		for (const child of [...fromNodes, ...toNodes]) {
 			child.resolved = null;
+		}
+
+		const prewarm = getTransitionPrewarmTimes({
+			planned,
+			time: context.time,
+			leadTime: TRANSITION_PREWARM_SECONDS * TICKS_PER_SECOND,
+		});
+		if (prewarm) {
+			// Warm the incoming decode stream in the background; nothing is drawn.
+			for (const child of toNodes) {
+				void resolveNode({
+					node: child,
+					context: {
+						...context,
+						time: prewarm.toVisualTime,
+						sourceClipTimeOverride: prewarm.toSourceClipTime,
+					},
+				})
+					.then(() => {
+						child.resolved = null;
+					})
+					.catch(() => {});
+			}
 		}
 		return null;
 	}
