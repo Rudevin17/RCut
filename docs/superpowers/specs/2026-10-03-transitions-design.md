@@ -136,7 +136,7 @@ The final list may change during porting if a shader doesn't translate well; any
 ### 5. UI
 
 - **Transitions tab** (`components/editor/panels/assets`): it replaces the placeholder with a grouped grid (Basic / Cinematic / Gaming) and search. Each tile shows the name and a static thumbnail, rendered once by the transition shader at progress 0.5 on two built-in sample images and cached.
-- **Timeline:** a drop target on cuts and a transition block straddling the cut, which is selectable, deletable and can be dragged to change its duration.
+- **Timeline:** a drop target on cuts and a transition block straddling the cut, which is selectable and deletable. Duration is edited in the Properties panel in v1; dragging the block's edges may come later.
 - **Properties panel:** Duration plus the definition's params, using the existing param controls.
 
 ## Phases (each independently testable)
