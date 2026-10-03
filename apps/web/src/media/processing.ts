@@ -6,6 +6,8 @@ import type { MediaAsset } from "@/media/types";
 import { readVideoFile } from "./mediabunny";
 import type { VideoFileData } from "./mediabunny";
 import { renderThumbnailDataUrl } from "./thumbnail";
+import { planMediaImport } from "@/media/linked-media";
+import { openLinkedFile, resolveFilePaths } from "@/services/linked-files";
 
 export interface ProcessedMediaAsset extends Omit<MediaAsset, "id"> {}
 
@@ -82,6 +84,27 @@ async function generateImageThumbnail({
 	});
 }
 
+async function linkImportedFile({
+	file,
+	path,
+}: {
+	file: File;
+	path: string | null;
+}): Promise<{ file: File; sourcePath?: string }> {
+	const plan = planMediaImport({ path });
+	if (plan.mode === "copy") return { file };
+
+	// Confirm the link opens now, so an unsupported runtime falls back to
+	// copying instead of producing an asset that is missing on next open.
+	const result = await openLinkedFile({ path: plan.sourcePath });
+	if (result.status !== "ok") {
+		console.warn(`Could not link ${file.name}; copying instead.`, result);
+		return { file };
+	}
+
+	return { file: result.file, sourcePath: plan.sourcePath };
+}
+
 export async function processMediaAssets({
 	files,
 	onProgress,
@@ -95,26 +118,35 @@ export async function processMediaAssets({
 	const total = fileArray.length;
 	let completed = 0;
 
-	for (const file of fileArray) {
-		const fileType = getMediaTypeFromFile({ file });
+	const paths = await resolveFilePaths({ files: fileArray });
+
+	for (const [index, inputFile] of fileArray.entries()) {
+		const fileType = getMediaTypeFromFile({ file: inputFile });
 
 		if (!fileType) {
-			toast.error(`Unsupported file type: ${file.name}`);
+			toast.error(`Unsupported file type: ${inputFile.name}`);
 			continue;
 		}
 
-		const storageCheck = await storageService.canStoreFile({
-			size: file.size,
+		const { file, sourcePath } = await linkImportedFile({
+			file: inputFile,
+			path: paths[index] ?? null,
 		});
 
-		if (!storageCheck.canStore) {
-			toast.error(`Not enough browser storage for ${file.name}`, {
-				description: getStorageLimitDescription({
-					fileSize: file.size,
-					availableBytes: storageCheck.availableBytes,
-				}),
+		if (!sourcePath) {
+			const storageCheck = await storageService.canStoreFile({
+				size: file.size,
 			});
-			continue;
+
+			if (!storageCheck.canStore) {
+				toast.error(`Not enough browser storage for ${file.name}`, {
+					description: getStorageLimitDescription({
+						fileSize: file.size,
+						availableBytes: storageCheck.availableBytes,
+					}),
+				});
+				continue;
+			}
 		}
 
 		const url = URL.createObjectURL(file);
@@ -175,6 +207,7 @@ export async function processMediaAssets({
 				height,
 				fps,
 				hasAudio,
+				sourcePath,
 			});
 
 			await new Promise((resolve) => setTimeout(resolve, 0));
