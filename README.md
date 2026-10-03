@@ -8,11 +8,13 @@ No accounts, no server. Projects are stored on this machine.
 
 - [Bun](https://bun.sh) 1.3+
 - [Rust](https://rustup.rs) (stable, MSVC toolchain) + Visual Studio Build Tools ("Desktop development with C++")
+- `rustup target add wasm32-unknown-unknown` and `cargo install wasm-pack` (builds the renderer)
 - WebView2 runtime (included with Windows 11)
 
 ## Develop
 
 ```bash
+bun run build:wasm    # build the renderer (needed before the first bun install)
 bun install
 bun run dev:web       # editor in the browser at http://localhost:3000
 bun run dev:desktop   # editor in the RCut window
