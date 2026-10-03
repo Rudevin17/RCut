@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { TransitionTopIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
@@ -34,6 +35,17 @@ import {
 } from "@/components/section";
 import { useEditor } from "@/editor/use-editor";
 import { DEFAULT_EXPORT_OPTIONS } from "@/export/defaults";
+import { getExportFileName } from "@/export/export-file-name";
+import { useExportSettingsStore } from "@/export/export-settings-store";
+import {
+	getDefaultExportFolder,
+	isNativeExportAvailable,
+	pickExportFile,
+	pickExportFolder,
+	revealInFolder,
+	saveExportAs,
+	saveExportToFolder,
+} from "@/services/export-destination";
 
 function isExportFormat(value: string): value is ExportFormat {
 	return EXPORT_FORMAT_VALUES.some((formatValue) => formatValue === value);
@@ -41,6 +53,54 @@ function isExportFormat(value: string): value is ExportFormat {
 
 function isExportQuality(value: string): value is ExportQuality {
 	return EXPORT_QUALITY_VALUES.some((qualityValue) => qualityValue === value);
+}
+
+type ExportDestination =
+	| { kind: "folder"; folder: string }
+	| { kind: "file"; path: string }
+	| { kind: "download" };
+
+async function saveExport({
+	buffer,
+	destination,
+	fileName,
+	mimeType,
+}: {
+	buffer: ArrayBuffer;
+	destination: ExportDestination;
+	fileName: string;
+	mimeType: string;
+}): Promise<void> {
+	if (destination.kind === "download") {
+		downloadBuffer({ buffer, filename: fileName, mimeType });
+		return;
+	}
+
+	try {
+		const path =
+			destination.kind === "folder"
+				? await saveExportToFolder({
+						buffer,
+						folder: destination.folder,
+						fileName,
+					})
+				: await saveExportAs({ buffer, path: destination.path });
+
+		toast.success(`Exported to ${path}`, {
+			action: {
+				label: "Show in folder",
+				onClick: () => {
+					revealInFolder({ path }).catch((error) =>
+						console.error("Failed to show export in folder:", error),
+					);
+				},
+			},
+		});
+	} catch (error) {
+		toast.error("Couldn't save the export", {
+			description: error instanceof Error ? error.message : String(error),
+		});
+	}
 }
 
 export function ExportButton() {
@@ -111,8 +171,55 @@ function ExportPopover({
 		DEFAULT_EXPORT_OPTIONS.includeAudio ?? true,
 	);
 
-	const handleExport = async () => {
+	const isNativeExport = isNativeExportAvailable();
+	const { exportFolder, setExportFolder } = useExportSettingsStore();
+	const [defaultFolder, setDefaultFolder] = useState<string | null>(null);
+
+	useEffect(() => {
+		if (!isNativeExport || exportFolder) return;
+		getDefaultExportFolder()
+			.then(setDefaultFolder)
+			.catch((error) =>
+				console.error("Failed to read the Downloads folder:", error),
+			);
+	}, [isNativeExport, exportFolder]);
+
+	const targetFolder = exportFolder ?? defaultFolder;
+
+	const handleChangeFolder = async () => {
+		const folder = await pickExportFolder({ currentFolder: targetFolder });
+		if (folder) setExportFolder({ folder });
+	};
+
+	const handleExport = async ({
+		saveAs = false,
+	}: { saveAs?: boolean } = {}) => {
 		if (!activeProject) return;
+
+		const fileName = getExportFileName({
+			projectName: activeProject.metadata.name,
+			extension: getExportFileExtension({ format }),
+		});
+
+		let destination: ExportDestination = { kind: "download" };
+		if (isNativeExport) {
+			if (!targetFolder) {
+				toast.error("Choose an export folder first");
+				return;
+			}
+
+			if (saveAs) {
+				const path = await pickExportFile({
+					folder: targetFolder,
+					fileName,
+					extension: format,
+				});
+				if (!path) return;
+				destination = { kind: "file", path };
+			} else {
+				destination = { kind: "folder", folder: targetFolder };
+			}
+		}
 
 		const result = await editor.project.export({
 			options: {
@@ -129,9 +236,10 @@ function ExportPopover({
 		}
 
 		if (result.success && result.buffer) {
-			downloadBuffer({
+			await saveExport({
 				buffer: result.buffer,
-				filename: `${activeProject.metadata.name}${getExportFileExtension({ format })}`,
+				destination,
+				fileName,
 				mimeType: getExportMimeType({ format }),
 			});
 
@@ -149,7 +257,7 @@ function ExportPopover({
 			{exportResult && !exportResult.success ? (
 				<ExportError
 					error={exportResult.error || "Unknown error occurred"}
-					onRetry={handleExport}
+					onRetry={() => handleExport()}
 				/>
 			) : (
 				<>
@@ -252,11 +360,44 @@ function ExportPopover({
 									</Section>
 								</div>
 
-								<div className="p-3 pt-0">
-									<Button onClick={handleExport} className="w-full gap-2">
-										<Download className="size-4" />
-										Export
-									</Button>
+								<div className="flex flex-col gap-2 p-3 pt-0">
+									{isNativeExport && (
+										<div className="flex items-center gap-2 text-xs">
+											<span className="text-muted-foreground shrink-0">
+												Save to
+											</span>
+											<span
+												className="min-w-0 flex-1 truncate"
+												title={targetFolder ?? undefined}
+											>
+												{targetFolder ?? "Downloads"}
+											</span>
+											<Button
+												size="sm"
+												variant="outline"
+												onClick={handleChangeFolder}
+											>
+												Change…
+											</Button>
+										</div>
+									)}
+									<div className="flex gap-2">
+										<Button
+											onClick={() => handleExport()}
+											className="flex-1 gap-2"
+										>
+											<Download className="size-4" />
+											Export
+										</Button>
+										{isNativeExport && (
+											<Button
+												variant="outline"
+												onClick={() => handleExport({ saveAs: true })}
+											>
+												Export as…
+											</Button>
+										)}
+									</div>
 								</div>
 							</>
 						)}
