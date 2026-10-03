@@ -1,5 +1,5 @@
 import type { ShortcutKey } from "@/actions/keybinding";
-import type { TActionWithOptionalArgs } from "./types";
+import type { TActionWithArgs, TActionWithOptionalArgs } from "./types";
 
 export type TActionCategory =
 	| "playback"
@@ -149,6 +149,17 @@ export const ACTIONS = {
 		args: { projectId: "string", assetIds: "string[]" },
 	},
 } as const satisfies Record<string, TActionBaseDefinition>;
+
+const ACTIONS_WITH_REQUIRED_ARGS: ReadonlySet<string> = new Set<TActionWithArgs>([
+	"remove-media-asset",
+	"remove-media-assets",
+]);
+
+export function isActionWithOptionalArgs(
+	value: string,
+): value is TActionWithOptionalArgs {
+	return Object.hasOwn(ACTIONS, value) && !ACTIONS_WITH_REQUIRED_ARGS.has(value);
+}
 
 export type TAction = keyof typeof ACTIONS;
 
