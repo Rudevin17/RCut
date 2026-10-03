@@ -4,7 +4,8 @@
 		"build": {
 			"dependsOn": ["^build"],
 			"outputs": [".next/**", "!.next/cache/**", "out/**"],
-			"env": ["NODE_ENV"]
+			"env": ["NODE_ENV"],
+			"cache": false
 		},
 		"check-types": {
 			"dependsOn": ["^check-types"]

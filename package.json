@@ -4,7 +4,7 @@
 	"packageManager": "bun@1.2.18",
 	"workspaces": ["apps/*", "rust/wasm/pkg"],
 	"scripts": {
-		"build:desktop": "bun run --filter @rcut/desktop build",
+		"build:desktop": "bun run build:wasm && bun run --filter @rcut/desktop build",
 		"build:wasm": "wasm-pack build rust/wasm --target bundler --out-dir pkg",
 		"build:web": "bun run build:wasm && turbo run build --filter=@rcut/web",
 		"dev:desktop": "bun run --filter @rcut/desktop dev",
