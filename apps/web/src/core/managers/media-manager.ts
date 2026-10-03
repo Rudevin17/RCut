@@ -2,7 +2,17 @@ import type { EditorCore } from "@/core";
 import { toast } from "sonner";
 import type { MediaAsset } from "@/media/types";
 import { storageService } from "@/services/storage/service";
-import type { MissingMediaAsset } from "@/services/storage/types";
+import type {
+	MediaAssetData,
+	MissingMediaAsset,
+} from "@/services/storage/types";
+import { getMediaTypeFromFile } from "@/media/media-utils";
+import {
+	applyRelinkedAsset,
+	isRelinkCompatible,
+	toMediaAssetData,
+} from "@/media/linked-media";
+import { openLinkedFile, resolveFilePaths } from "@/services/linked-files";
 import { generateUUID } from "@/utils/id";
 import { videoCache } from "@/services/video-cache/service";
 import { waveformCache } from "@/services/waveform-cache/service";
@@ -169,6 +179,75 @@ export class MediaManager {
 
 	getMissingAssets(): MissingMediaAsset[] {
 		return this.missingAssets;
+	}
+
+	async relinkMediaAsset({
+		projectId,
+		id,
+		file,
+	}: {
+		projectId: string;
+		id: string;
+		file: File;
+	}): Promise<boolean> {
+		const missingAsset = this.missingAssets.find((asset) => asset.id === id);
+		if (!missingAsset) return false;
+
+		if (
+			!isRelinkCompatible({
+				missingAsset,
+				fileType: getMediaTypeFromFile({ file }),
+			})
+		) {
+			toast.error(`${file.name} is not a ${missingAsset.type} file`);
+			return false;
+		}
+
+		const [path] = await resolveFilePaths({ files: [file] });
+		if (!path) {
+			toast.error(`Couldn't read the location of ${file.name}`);
+			return false;
+		}
+
+		const result = await openLinkedFile({ path });
+		if (result.status !== "ok") {
+			toast.error(`Couldn't open ${file.name}`, {
+				description:
+					result.status === "error" ? result.message : "File not found",
+			});
+			return false;
+		}
+
+		const metadata: MediaAssetData = {
+			...toMediaAssetData({ missingAsset }),
+			sourcePath: path,
+			size: result.file.size,
+			lastModified: result.file.lastModified,
+		};
+
+		try {
+			await storageService.saveMediaAssetMetadata({ projectId, metadata });
+		} catch (error) {
+			console.error("Failed to save relinked media:", error);
+			toast.error(`Couldn't relink ${missingAsset.name}`);
+			return false;
+		}
+
+		const next = applyRelinkedAsset({
+			assets: this.assets,
+			missingAssets: this.missingAssets,
+			relinked: {
+				...metadata,
+				file: result.file,
+				url: URL.createObjectURL(result.file),
+			},
+		});
+		this.assets = next.assets;
+		this.missingAssets = next.missingAssets;
+		this.notify();
+
+		toast.success(`Relinked ${missingAsset.name}`);
+		return true;
 	}
 
 	setAssets({ assets }: { assets: MediaAsset[] }): void {

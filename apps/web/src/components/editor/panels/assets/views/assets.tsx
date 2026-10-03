@@ -3,6 +3,7 @@
 import Image from "next/image";
 import { useMemo, useState } from "react";
 import { PanelView } from "@/components/editor/panels/assets/views/base-panel";
+import { MissingMediaList } from "@/components/editor/panels/assets/views/missing-media-list";
 import { MediaDragOverlay } from "@/components/editor/panels/assets/drag-overlay";
 import { DraggableItem } from "@/components/editor/panels/assets/draggable-item";
 import { Button } from "@/components/ui/button";
@@ -208,6 +209,7 @@ export function MediaView() {
 				contentClassName="h-full"
 				{...dragProps}
 			>
+				<MissingMediaList projectId={activeProject.metadata.id} />
 				{isDragOver || filteredMediaItems.length === 0 ? (
 					<MediaDragOverlay
 						isVisible={true}
