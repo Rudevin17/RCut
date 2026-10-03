@@ -94,6 +94,7 @@ All page↔host messages are JSON with a `type` field prefixed `rcut:`.
 
 - `processMediaAssets` calls `resolveFilePaths` once for the whole batch.
 - A pure function `planMediaImport({ path })` returns `{ mode: "link", sourcePath } | { mode: "copy" }` and is unit-tested.
+- The `link` mode first confirms the link works by calling `openLinkedFile({ path })` once and uses the returned `File` for the asset. If that returns anything other than `ok`, it falls back to `copy` mode, so an incompatible runtime never produces assets that are missing on the next open.
 - The `link` mode skips `canStoreFile` and sets `sourcePath` on the `ProcessedMediaAsset`. Thumbnail and metadata extraction is unchanged; it reads from the `File`, which is disk-backed.
 
 ### 5. Media manager + UI
