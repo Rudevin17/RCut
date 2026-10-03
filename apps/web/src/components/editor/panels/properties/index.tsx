@@ -29,7 +29,10 @@ export function PropertiesPanel() {
 		return (
 			<div className="panel bg-background flex h-full flex-col overflow-hidden rounded-sm border">
 				<ScrollArea className="flex-1 scrollbar-hidden">
-					<TransitionProperties selection={selectedTransition} />
+					<TransitionProperties
+						key={selectedTransition.transitionId}
+						selection={selectedTransition}
+					/>
 				</ScrollArea>
 			</div>
 		);
