@@ -14,7 +14,7 @@ const missingVideo: MissingMediaAsset = {
 	type: "video",
 	size: 10,
 	lastModified: 1,
-	sourcePath: "D:\old\clip.mp4",
+	sourcePath: "D:\\old\\clip.mp4",
 	reason: "missing",
 };
 
@@ -29,9 +29,9 @@ function asset({ id }: { id: string }): MediaAsset {
 
 describe("planMediaImport", () => {
 	test("links files that have a path", () => {
-		expect(planMediaImport({ path: "D:\a.mp4" })).toEqual({
+		expect(planMediaImport({ path: "D:\\a.mp4" })).toEqual({
 			mode: "link",
-			sourcePath: "D:\a.mp4",
+			sourcePath: "D:\\a.mp4",
 		});
 	});
 
@@ -79,7 +79,7 @@ describe("toMediaAssetData", () => {
 			type: "video",
 			size: 10,
 			lastModified: 1,
-			sourcePath: "D:\old\clip.mp4",
+			sourcePath: "D:\\old\\clip.mp4",
 		});
 	});
 });
