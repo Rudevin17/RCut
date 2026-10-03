@@ -26,6 +26,8 @@ import {
 	type ScopeEntry,
 } from "@/selection/scope";
 import { useCommittedRef } from "@/hooks/use-committed-ref";
+import { useTransitionSelectionStore } from "@/transitions/selection-store";
+import { removeTrackTransition } from "@/transitions/actions";
 
 export function useEditorActions() {
 	const editor = useEditor();
@@ -300,6 +302,11 @@ export function useEditorActions() {
 	useActionHandler(
 		"delete-selected",
 		() => {
+			const selectedTransition = useTransitionSelectionStore.getState().selected;
+			if (selectedTransition && selectedElements.length === 0) {
+				removeTrackTransition(selectedTransition);
+				return;
+			}
 			switch (editor.selection.getActiveSelectionKind()) {
 				case "mask-points":
 					if (!selectedMaskPointSelection) {
@@ -407,6 +414,7 @@ export function useEditorActions() {
 			if (!clearActiveScope()) {
 				editor.selection.clearMostSpecificSelection();
 			}
+			useTransitionSelectionStore.getState().clear();
 		},
 		undefined,
 	);

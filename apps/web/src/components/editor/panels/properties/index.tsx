@@ -14,6 +14,8 @@ import { usePropertiesStore } from "./stores/properties-store";
 import { getPropertiesConfig } from "./registry";
 import { cn } from "@/utils/ui";
 import { EmptyView } from "./empty-view";
+import { useTransitionSelectionStore } from "@/transitions/selection-store";
+import { TransitionProperties } from "@/transitions/components/transition-properties";
 
 export function PropertiesPanel() {
 	const editor = useEditor();
@@ -21,6 +23,17 @@ export function PropertiesPanel() {
 	useEditor((e) => e.media.getAssets());
 	const { selectedElements } = useElementSelection();
 	const { activeTabPerType, setActiveTab } = usePropertiesStore();
+	const selectedTransition = useTransitionSelectionStore((s) => s.selected);
+
+	if (selectedTransition && selectedElements.length === 0) {
+		return (
+			<div className="panel bg-background flex h-full flex-col overflow-hidden rounded-sm border">
+				<ScrollArea className="flex-1 scrollbar-hidden">
+					<TransitionProperties selection={selectedTransition} />
+				</ScrollArea>
+			</div>
+		);
+	}
 
 	if (selectedElements.length === 0) {
 		return (
