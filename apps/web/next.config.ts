@@ -5,7 +5,11 @@ const nextConfig: NextConfig = {
 		removeConsole: process.env.NODE_ENV === "production",
 	},
 	reactStrictMode: true,
-	output: "standalone",
+	output: "export",
+	trailingSlash: true,
+	images: {
+		unoptimized: true,
+	},
 };
 
 export default nextConfig;

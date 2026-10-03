@@ -1,6 +1,6 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import {
 	ResizablePanelGroup,
 	ResizablePanel,
@@ -16,7 +16,7 @@ import { MigrationDialog } from "@/project/components/migration-dialog";
 import { usePanelStore } from "@/editor/panel-store";
 import { usePasteMedia } from "@/media/use-paste-media";
 import { MobileGate } from "@/components/editor/mobile-gate";
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useEditor } from "@/editor/use-editor";
 import { Cancel01Icon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -34,8 +34,15 @@ import {
 } from "@/timeline/bookmarks/index";
 
 export default function Editor() {
-	const params = useParams();
-	const projectId = params.project_id as string;
+	return (
+		<Suspense fallback={null}>
+			<EditorPage />
+		</Suspense>
+	);
+}
+
+function EditorPage() {
+	const projectId = useSearchParams().get("id") ?? "";
 
 	return (
 		<MobileGate>

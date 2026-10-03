@@ -63,6 +63,7 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DeleteProjectDialog } from "@/project/components/delete-project-dialog";
+import { getEditorUrl } from "@/project/editor-url";
 import { ProjectInfoDialog } from "@/project/components/project-info-dialog";
 import { RenameProjectDialog } from "@/project/components/rename-project-dialog";
 import { cn } from "@/utils/ui";
@@ -510,7 +511,7 @@ function NewProjectButton() {
 		const projectId = await editor.project.createNewProject({
 			name: "New project",
 		});
-		router.push(`/editor/${projectId}`);
+		router.push(getEditorUrl({ projectId }));
 	};
 
 	return (
@@ -662,7 +663,7 @@ function ProjectItem({
 				className="size-5 shrink-0"
 			/>
 
-			<Link href={`/editor/${project.id}`} className="flex-1 min-w-0">
+			<Link href={getEditorUrl({ projectId: project.id })} className="flex-1 min-w-0">
 				{listRowContent}
 			</Link>
 
@@ -687,7 +688,7 @@ function ProjectItem({
 					<div className="group relative">
 						{isGridView ? (
 							<>
-								<Link href={`/editor/${project.id}`} className="block">
+								<Link href={getEditorUrl({ projectId: project.id })} className="block">
 									{gridContent}
 								</Link>
 
@@ -956,7 +957,7 @@ function EmptyState() {
 			const projectId = await editor.project.createNewProject({
 				name: "New project",
 			});
-			router.push(`/editor/${projectId}`);
+			router.push(getEditorUrl({ projectId }));
 		} catch (error) {
 			toast.error("Failed to create project", {
 				description:
