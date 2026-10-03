@@ -115,8 +115,8 @@ The final list may change during porting if a shader doesn't translate well; any
 
 ### 3. Timeline data (TypeScript)
 
-- `VideoTrack` gains `transitions: TrackTransition[]`, where `TrackTransition = { id, fromElementId, toElementId, type, duration: MediaTime, params: ParamValues }`.
-- A storage migration adds `transitions: []` to existing projects.
+- `VideoTrack` gains an optional `transitions?: TrackTransition[]` field, where `TrackTransition = { id, fromElementId, toElementId, type, duration: MediaTime, params: ParamValues }`. Because the field is optional, no storage migration is needed.
+- Phase 2 implements the planner (`planTrackTransitions`, `getTransitionSideTimes`). Reconciliation and the editing commands below come with the Phase 3 UI.
 - Pure functions in `apps/web/src/transitions/`, all unit-tested:
   - `findCuts({ track })` returns adjacent element pairs.
   - `getTransitionWindow({ transition, track })` returns `{ start, end }`.
@@ -128,10 +128,10 @@ The final list may change during porting if a shader doesn't translate well; any
 
 ### 4. Renderer integration (TypeScript)
 
-- In `services/renderer`, when a track has an active transition at time `t`, scene building emits a `TransitionNode` instead of the two element nodes for that window.
-- The `TransitionNode` renders A at its handle time and B at its handle time, each to an offscreen canvas, using the existing element rendering.
-- It then calls `applyTransition` and composites the result where the clips would have been drawn.
-- The blur background (`background.type === "blur"`) uses the transition output as its source during the window.
+- The scene builder gives clips that touch a transition a `visibleRange`, so they are hidden inside the window. It adds a `TransitionNode` holding copies of both clips, including each clip's blur backdrop on the main track.
+- At resolve time, each side uses its own visual time, kept inside the clip, and a source clip time that extends into the handles and then holds.
+- The frame descriptor emits the compositor `transition` item.
+- When both clips come from the same file, the incoming side uses a separate video-cache stream so the two sides don't force each other to re-seek.
 
 ### 5. UI
 
