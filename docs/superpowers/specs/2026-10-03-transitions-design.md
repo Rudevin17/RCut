@@ -111,7 +111,7 @@ The final list may change during porting if a shader doesn't translate well; any
 - The pass binds `from` and `to` textures, a sampler, and a uniform buffer: progress, aspect ratio, and the transition params.
 - Shaders are WGSL files in `rust/crates/transitions/src/shaders/`, one per transition. A shared prelude provides `getFromColor(uv)`, `getToColor(uv)`, `progress` and `ratio`, so ports stay close to the GLSL originals.
 - Shader IDs are kebab-case strings, e.g. `"glitch-displace"`. Unknown IDs return an error.
-- WASM export `applyTransition(options) -> OffscreenCanvas` in `rust/wasm/src/transitions.rs`, mirroring the existing `applyEffectPasses`.
+- The Rust compositor gains a `transition` frame item: `{ shader, progress, params, fromItems, toItems }`. It composites each side's items onto a transparent texture, runs the transition shader, and blends the result into the scene. This means no extra JS↔GPU copies and no separate WASM export. A standalone export can be added later if thumbnails need it.
 
 ### 3. Timeline data (TypeScript)
 
