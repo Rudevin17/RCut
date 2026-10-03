@@ -11,6 +11,7 @@ import type {
 import { calculateTotalDuration } from "@/timeline";
 import { TimelineDragSource } from "@/timeline/drag-source";
 import { findTrackInSceneTracks } from "@/timeline/track-element-update";
+import { reconcileTransitions } from "@/transitions/edit";
 import { lastFrameMediaTime, type MediaTime, ZERO_MEDIA_TIME } from "@/wasm";
 import {
 	canElementBeHidden,
@@ -929,7 +930,9 @@ export class TimelineManager {
 	updateTracks(newTracks: SceneTracks): void {
 		this.previewOverlay.clear();
 		this.previewTracks = null;
-		this.editor.scenes.updateSceneTracks({ tracks: newTracks });
+		this.editor.scenes.updateSceneTracks({
+			tracks: reconcileTransitions({ tracks: newTracks }),
+		});
 		this.notify();
 	}
 }
