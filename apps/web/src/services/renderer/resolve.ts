@@ -8,6 +8,7 @@ import {
 import { effectsRegistry, resolveEffectPasses } from "@/effects";
 import type { Effect, EffectPass } from "@/effects/types";
 import { getSourceTimeAtClipTime } from "@/retime";
+import type { RetimeConfig } from "@/timeline";
 import {
 	DEFAULT_GRAPHIC_SOURCE_SIZE,
 	resolveGraphicElementParamsAtTime,
@@ -228,16 +229,14 @@ async function resolveVideoNode({
 		return null;
 	}
 
-	const sourceTimeTicks =
-		node.params.trimStart +
-		getSourceTimeAtClipTime({
-			clipTime: context.sourceClipTimeOverride ?? clipTime,
-			retime: node.params.retime,
-		});
 	const frame = await videoCache.getFrameAt({
 		mediaId: node.params.cacheKey ?? node.params.mediaId,
 		file: node.params.file,
-		time: mediaTimeToSeconds({ time: roundMediaTime({ time: sourceTimeTicks }) }),
+		time: getVideoSourceSeconds({
+			trimStart: node.params.trimStart,
+			retime: node.params.retime,
+			clipTime: context.sourceClipTimeOverride ?? clipTime,
+		}),
 	});
 	if (!frame) {
 		return null;
@@ -449,6 +448,49 @@ async function resolveBlurBackgroundNode({
 	};
 }
 
+function getVideoSourceSeconds({
+	trimStart,
+	retime,
+	clipTime,
+}: {
+	trimStart: number;
+	retime?: RetimeConfig;
+	clipTime: number;
+}): number {
+	return mediaTimeToSeconds({
+		time: roundMediaTime({
+			time: trimStart + getSourceTimeAtClipTime({ clipTime, retime }),
+		}),
+	});
+}
+
+/** Requests frames only, never touching node render state, so it cannot race the window. */
+function prewarmTransitionSide({
+	nodes,
+	clipTime,
+}: {
+	nodes: AnyBaseNode[];
+	clipTime: number;
+}): void {
+	for (const node of nodes) {
+		const isVideo =
+			node instanceof VideoNode ||
+			(node instanceof BlurBackgroundNode && node.params.mediaType === "video");
+		if (!isVideo) continue;
+		void videoCache
+			.getFrameAt({
+				mediaId: node.params.cacheKey ?? node.params.mediaId,
+				file: node.params.file,
+				time: getVideoSourceSeconds({
+					trimStart: node.params.trimStart,
+					retime: node.params.retime,
+					clipTime,
+				}),
+			})
+			.catch(() => {});
+	}
+}
+
 async function resolveTransitionNode({
 	node,
 	context,
@@ -468,21 +510,10 @@ async function resolveTransitionNode({
 			leadTime: TRANSITION_PREWARM_SECONDS * TICKS_PER_SECOND,
 		});
 		if (prewarm) {
-			// Warm the incoming decode stream in the background; nothing is drawn.
-			for (const child of toNodes) {
-				void resolveNode({
-					node: child,
-					context: {
-						...context,
-						time: prewarm.toVisualTime,
-						sourceClipTimeOverride: prewarm.toSourceClipTime,
-					},
-				})
-					.then(() => {
-						child.resolved = null;
-					})
-					.catch(() => {});
-			}
+			prewarmTransitionSide({
+				nodes: toNodes,
+				clipTime: prewarm.toSourceClipTime,
+			});
 		}
 		return null;
 	}
@@ -522,16 +553,14 @@ async function resolveBackdropSource({
 	clipTime: number;
 }): Promise<BackdropSource | null> {
 	if (node.params.mediaType === "video") {
-		const sourceTimeTicks =
-			node.params.trimStart +
-			getSourceTimeAtClipTime({
-				clipTime,
-				retime: node.params.retime,
-			});
 		const frame = await videoCache.getFrameAt({
 			mediaId: node.params.cacheKey ?? node.params.mediaId,
 			file: node.params.file,
-			time: mediaTimeToSeconds({ time: roundMediaTime({ time: sourceTimeTicks }) }),
+			time: getVideoSourceSeconds({
+				trimStart: node.params.trimStart,
+				retime: node.params.retime,
+				clipTime,
+			}),
 		});
 		if (!frame) {
 			return null;
