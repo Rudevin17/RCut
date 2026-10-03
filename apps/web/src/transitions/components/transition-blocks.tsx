@@ -2,6 +2,7 @@
 
 import { ArrowRightDoubleIcon } from "@hugeicons/core-free-icons";
 import { HugeiconsIcon } from "@hugeicons/react";
+import { useMemo } from "react";
 import { useEditor } from "@/editor/use-editor";
 import type { VideoTrack } from "@/timeline";
 import { useElementSelection } from "@/timeline/hooks/element/use-element-selection";
@@ -29,7 +30,7 @@ export function TransitionBlocks({
 	const selected = useTransitionSelectionStore((state) => state.selected);
 	const select = useTransitionSelectionStore((state) => state.select);
 	const { selectedElements } = useElementSelection();
-	const { transitions } = planTrackTransitions({ track });
+	const { transitions } = useMemo(() => planTrackTransitions({ track }), [track]);
 
 	return (
 		<>
@@ -55,9 +56,8 @@ export function TransitionBlocks({
 						type="button"
 						title={name}
 						aria-label={`${name} transition`}
-						aria-pressed={isSelected}
 						className={cn(
-							"absolute top-1/2 flex h-5 -translate-y-1/2 cursor-pointer items-center justify-center gap-1 overflow-hidden rounded-full border border-white/40 bg-black/60 px-1.5 text-[10px] text-white backdrop-blur-sm",
+							"focus-visible:ring-ring absolute top-1/2 flex h-5 -translate-y-1/2 cursor-pointer items-center justify-center gap-1 overflow-hidden rounded-full border border-white/40 bg-black/60 px-1.5 text-[10px] text-white backdrop-blur-sm focus-visible:ring-2 focus-visible:outline-hidden",
 							isSelected && "ring-primary ring-2",
 						)}
 						style={{ left: centre - width / 2, width, zIndex }}

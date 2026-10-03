@@ -23,6 +23,7 @@ import {
 	timelineTimeToSnappedPixels,
 } from "@/timeline";
 import { getTrackHeight } from "./track-layout";
+import { TIMELINE_LAYERS } from "./layers";
 import { getTimelineElementClassName, TIMELINE_TRACK_THEME } from "./theme";
 import {
 	ContextMenu,
@@ -388,6 +389,10 @@ export function TimelineElement({
 							transform:
 								isDragging && isBeingDragged
 									? `translate3d(0, ${dragOffsetY}px, 0)`
+									: undefined,
+							zIndex:
+								isDragging && isBeingDragged
+									? TIMELINE_LAYERS.draggedElement
 									: undefined,
 						}}
 					>

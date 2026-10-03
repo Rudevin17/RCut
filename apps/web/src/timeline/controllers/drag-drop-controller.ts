@@ -135,6 +135,15 @@ function getDurationForDrag({
 	return toElementDurationTicks({ seconds: media?.duration });
 }
 
+function isSameCut({ a, b }: { a: Cut | null; b: Cut | null }): boolean {
+	if (!a || !b) return a === b;
+	return (
+		a.trackId === b.trackId &&
+		a.fromElementId === b.fromElementId &&
+		a.toElementId === b.toElementId
+	);
+}
+
 function orderedTracks({
 	sceneTracks,
 }: {
@@ -221,7 +230,13 @@ export class DragDropController {
 
 		if (dragData.type === "transition") {
 			const cut = this.findTransitionCut({ coords });
-			this.setOver({ dropTarget: null, elementType: null, transitionCut: cut });
+			const isUnchanged =
+				this.state.kind === "over" &&
+				this.state.dropTarget === null &&
+				isSameCut({ a: this.state.transitionCut, b: cut });
+			if (!isUnchanged) {
+				this.setOver({ dropTarget: null, elementType: null, transitionCut: cut });
+			}
 			event.dataTransfer.dropEffect = cut ? "copy" : "none";
 			return;
 		}

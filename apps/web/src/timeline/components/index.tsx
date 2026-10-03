@@ -72,6 +72,7 @@ import { useElementSelection } from "@/timeline/hooks/element/use-element-select
 import { useTimelineSeek } from "@/timeline/hooks/use-timeline-seek";
 import { useTimelineDragDrop } from "@/timeline/hooks/use-timeline-drag-drop";
 import type { Cut } from "@/transitions/edit";
+import { useTransitionSelectionStore } from "@/transitions/selection-store";
 import { TimelineRuler } from "./timeline-ruler";
 import {
 	TimelineBookmarksRow,
@@ -137,6 +138,13 @@ export function Timeline() {
 	);
 	const mainTrackId = scene?.tracks.main.id ?? null;
 	const seek = (time: MediaTime) => editor.playback.seek({ time });
+
+	// Clip selection and transition selection are mutually exclusive.
+	useEffect(() => {
+		if (selectedElements.length > 0) {
+			useTransitionSelectionStore.getState().clear();
+		}
+	}, [selectedElements.length]);
 
 	const timelineRef = useRef<HTMLDivElement>(null);
 	const timelineHeaderRef = useRef<HTMLDivElement>(null);
@@ -422,7 +430,10 @@ export function Timeline() {
 		zoomLevel,
 		duration: timeline.getTotalDuration(),
 		isSelecting,
-		clearSelectedElements: clearElementSelection,
+		clearSelectedElements: () => {
+			clearElementSelection();
+			useTransitionSelectionStore.getState().clear();
+		},
 		seek,
 	});
 
