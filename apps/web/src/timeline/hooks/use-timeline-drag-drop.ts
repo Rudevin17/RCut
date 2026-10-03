@@ -5,6 +5,7 @@ import {
 	DragDropController,
 	type DragDropConfig,
 } from "@/timeline/controllers/drag-drop-controller";
+import { addTransitionAtCut } from "@/transitions/actions";
 
 interface UseTimelineDragDropProps {
 	containerRef: RefObject<HTMLDivElement | null>;
@@ -37,6 +38,7 @@ export function useTimelineDragDrop({
 		executeCommand: (command) => editor.command.execute({ command }),
 		insertElement: (args) => editor.timeline.insertElement(args),
 		addClipEffect: (args) => editor.timeline.addClipEffect(args),
+		addTransitionAtCut,
 	};
 	const configRef = useCommittedRef(config);
 	const [controller] = useState(() => new DragDropController({ configRef }));
@@ -49,6 +51,7 @@ export function useTimelineDragDrop({
 		isDragOver: controller.isDragOver,
 		dropTarget: controller.dropTarget,
 		dragElementType: controller.dragElementType,
+		transitionCut: controller.transitionCut,
 		dragProps: {
 			onDragEnter: controller.onDragEnter,
 			onDragOver: controller.onDragOver,

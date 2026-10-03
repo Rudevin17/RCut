@@ -17,7 +17,12 @@ import {
 import { AddTrackCommand, InsertElementCommand } from "@/commands/timeline";
 import { BatchCommand } from "@/commands";
 import type { Command } from "@/commands/base-command";
-import { computeDropTarget } from "@/timeline/components/drop-target";
+import {
+	computeDropTarget,
+	getTrackAtY,
+} from "@/timeline/components/drop-target";
+import { getTimelinePixelsPerSecond } from "@/timeline/pixel-utils";
+import { findCutNearTime, type Cut } from "@/transitions/edit";
 import type { TimelineDragSource } from "@/timeline/drag-source";
 import type {
 	TrackType,
@@ -30,7 +35,10 @@ import type {
 import type { TimelineDragData, TransitionDragData } from "@/timeline/drag";
 import type { MediaAsset } from "@/media/types";
 import type { ProcessedMediaAsset } from "@/media/processing";
-import { roundFrameTime, type MediaTime } from "@/wasm";
+import { roundFrameTime, TICKS_PER_SECOND, type MediaTime } from "@/wasm";
+
+/** How close (in screen pixels) a transition drag must be to a cut to target it. */
+const TRANSITION_CUT_TOLERANCE_PX = 16;
 
 // --- Config ---
 
@@ -59,6 +67,7 @@ export interface DragDropConfig {
 		elementId: string;
 		effectType: string;
 	}) => void;
+	addTransitionAtCut: (args: { cut: Cut; type: string }) => void;
 }
 
 export interface DragDropConfigRef {
@@ -71,6 +80,7 @@ interface DragOverState {
 	kind: "over";
 	dropTarget: DropTarget | null;
 	elementType: ElementType | null;
+	transitionCut: Cut | null;
 }
 
 type DragDropState = { kind: "idle" } | DragOverState;
@@ -165,6 +175,10 @@ export class DragDropController {
 		return this.state.kind === "over" ? this.state.elementType : null;
 	}
 
+	get transitionCut(): Cut | null {
+		return this.state.kind === "over" ? this.state.transitionCut : null;
+	}
+
 	subscribe(fn: () => void): () => void {
 		this.subscribers.add(fn);
 		return () => this.subscribers.delete(fn);
@@ -206,7 +220,9 @@ export class DragDropController {
 		}
 
 		if (dragData.type === "transition") {
-			event.dataTransfer.dropEffect = "none";
+			const cut = this.findTransitionCut({ coords });
+			this.setOver({ dropTarget: null, elementType: null, transitionCut: cut });
+			event.dataTransfer.dropEffect = cut ? "copy" : "none";
 			return;
 		}
 
@@ -258,11 +274,19 @@ export class DragDropController {
 		if (!dragData && !hasFiles) return;
 
 		const currentTarget = this.dropTarget;
+		const currentCut = this.transitionCut;
 		this.setIdle();
 
 		try {
 			if (dragData) {
-				if (dragData.type === "transition") return;
+				if (dragData.type === "transition") {
+					if (!currentCut) return;
+					this.config.addTransitionAtCut({
+						cut: currentCut,
+						type: dragData.transitionType,
+					});
+					return;
+				}
 				if (!currentTarget) return;
 				this.executeAssetDrop({ target: currentTarget, dragData });
 				return;
@@ -284,12 +308,36 @@ export class DragDropController {
 
 	// --- Private ---
 
-	private setOver(state: {
+	private setOver({
+		dropTarget,
+		elementType,
+		transitionCut = null,
+	}: {
 		dropTarget: DropTarget | null;
 		elementType: ElementType | null;
+		transitionCut?: Cut | null;
 	}): void {
-		this.state = { kind: "over", ...state };
+		this.state = { kind: "over", dropTarget, elementType, transitionCut };
 		this.notify();
+	}
+
+	/** Nearest cut on the video track under the mouse, within the pixel tolerance. */
+	private findTransitionCut({ coords }: { coords: TimelineCoords }): Cut | null {
+		const tracks = orderedTracks({ sceneTracks: this.config.getSceneTracks() });
+		const trackAtMouse = getTrackAtY({ mouseY: coords.mouseY, tracks });
+		const track = trackAtMouse ? tracks[trackAtMouse.trackIndex] : undefined;
+		if (!track || track.type !== "video") return null;
+
+		// Same space as computeDropTarget: mouseX is timeline content pixels.
+		const pxPerSecond = getTimelinePixelsPerSecond({
+			zoomLevel: this.config.zoomLevel,
+		});
+		const time = (coords.mouseX / pxPerSecond) * TICKS_PER_SECOND;
+		return findCutNearTime({
+			track,
+			time,
+			tolerance: (TRANSITION_CUT_TOLERANCE_PX / pxPerSecond) * TICKS_PER_SECOND,
+		});
 	}
 
 	private setIdle(): void {

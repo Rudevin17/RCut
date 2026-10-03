@@ -71,6 +71,7 @@ import { TimelineToolbar } from "./timeline-toolbar";
 import { useElementSelection } from "@/timeline/hooks/element/use-element-selection";
 import { useTimelineSeek } from "@/timeline/hooks/use-timeline-seek";
 import { useTimelineDragDrop } from "@/timeline/hooks/use-timeline-drag-drop";
+import type { Cut } from "@/transitions/edit";
 import { TimelineRuler } from "./timeline-ruler";
 import {
 	TimelineBookmarksRow,
@@ -330,7 +331,7 @@ export function Timeline() {
 			playheadRef,
 		});
 
-	const { isDragOver, dropTarget, dragProps } = useTimelineDragDrop({
+	const { isDragOver, dropTarget, transitionCut, dragProps } = useTimelineDragDrop({
 		containerRef: tracksContainerRef,
 		tracksScrollRef,
 		zoomLevel,
@@ -559,6 +560,7 @@ export function Timeline() {
 										shouldIgnoreClick={shouldIgnoreClick}
 										isDragOver={isDragOver}
 										dropTarget={dropTarget}
+										transitionCut={transitionCut}
 									/>
 								)}
 							</div>
@@ -732,6 +734,7 @@ function TimelineTrackRows({
 	shouldIgnoreClick,
 	isDragOver,
 	dropTarget,
+	transitionCut,
 }: {
 	mainTrackId: string | null;
 	zoomLevel: number;
@@ -750,6 +753,7 @@ function TimelineTrackRows({
 	shouldIgnoreClick: () => boolean;
 	isDragOver: boolean;
 	dropTarget: DropTarget | null;
+	transitionCut: Cut | null;
 }) {
 	const timeline = useEditor((e) => e.timeline);
 	const scene = useEditor((e) => e.scenes.getActiveSceneOrNull());
@@ -830,6 +834,11 @@ function TimelineTrackRows({
 								targetElementId={
 									isDragOver
 										? (dropTarget?.targetElement?.elementId ?? null)
+										: null
+								}
+								highlightedCutTime={
+									isDragOver && transitionCut?.trackId === track.id
+										? transitionCut.time
 										: null
 								}
 							/>

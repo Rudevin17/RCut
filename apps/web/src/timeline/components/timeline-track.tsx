@@ -6,6 +6,7 @@ import type { TimelineTrack } from "@/timeline";
 import type { TimelineElement as TimelineElementType } from "@/timeline";
 import { TIMELINE_LAYERS } from "./layers";
 import type { ElementDragView } from "@/timeline";
+import { TransitionBlocks } from "@/transitions/components/transition-blocks";
 
 interface TimelineTrackContentProps {
 	track: TimelineTrack;
@@ -31,6 +32,7 @@ interface TimelineTrackContentProps {
 	onTrackMouseUp?: (event: React.MouseEvent) => void;
 	shouldIgnoreClick?: () => boolean;
 	targetElementId?: string | null;
+	highlightedCutTime?: number | null;
 }
 
 export function TimelineTrackContent({
@@ -44,6 +46,7 @@ export function TimelineTrackContent({
 	onTrackMouseUp,
 	shouldIgnoreClick,
 	targetElementId = null,
+	highlightedCutTime = null,
 }: TimelineTrackContentProps) {
 	const { isElementSelected } = useElementSelection();
 
@@ -107,6 +110,14 @@ export function TimelineTrackContent({
 							/>
 						);
 					})
+				)}
+				{track.type === "video" && (
+					<TransitionBlocks
+						track={track}
+						zoomLevel={zoomLevel}
+						highlightedCutTime={highlightedCutTime}
+						zIndex={TIMELINE_LAYERS.transitionBlocks}
+					/>
 				)}
 			</div>
 		</div>
