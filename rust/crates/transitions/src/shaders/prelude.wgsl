@@ -47,5 +47,13 @@ fn fragment_main(input: VertexOutput) -> @location(0) vec4f {
     ratio = uniforms.ratio;
     params0 = uniforms.params0;
     params1 = uniforms.params1;
-    return transition(vec2f(input.tex_coord.x, 1.0 - input.tex_coord.y));
+    // Both sides are composited over transparent, so their colors are
+    // premultiplied; return straight alpha because the compositor's blend
+    // expects a straight-alpha layer.
+    let color = transition(vec2f(input.tex_coord.x, 1.0 - input.tex_coord.y));
+    let alpha = clamp(color.a, 0.0, 1.0);
+    if (alpha <= 0.0) {
+        return vec4f(0.0);
+    }
+    return vec4f(clamp(color.rgb / alpha, vec3f(0.0), vec3f(1.0)), alpha);
 }
