@@ -63,6 +63,9 @@ export class VideoCache {
 	}): Promise<WrappedCanvas | null> {
 		if (sinkData.nextFrame && sinkData.nextFrame.timestamp <= time) {
 			sinkData.currentFrame = sinkData.nextFrame;
+			// Track the decode position, otherwise a later hiccup looks like a
+			// >2s jump and forces a full re-seek from the previous keyframe.
+			sinkData.lastTime = sinkData.currentFrame.timestamp;
 			sinkData.nextFrame = null;
 			this.startPrefetch({ sinkData });
 		}
