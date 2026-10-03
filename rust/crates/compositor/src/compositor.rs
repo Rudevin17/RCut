@@ -3,13 +3,14 @@ use effects::{ApplyEffectsOptions, EffectPass, EffectPipeline, UniformValue};
 use gpu::{FULLSCREEN_SHADER_SOURCE, GpuContext, wgpu};
 use masks::{ApplyMaskFeatherOptions, MaskFeatherPipeline};
 use thiserror::Error;
+use transitions::{ApplyTransitionOptions, TransitionPipeline};
 use wgpu::util::DeviceExt;
 
 use crate::{
     BlendMode,
     frame::{
         EffectPassDescriptor, EffectUniformValueDescriptor, FrameDescriptor, FrameItemDescriptor,
-        LayerDescriptor,
+        LayerDescriptor, TransitionDescriptor,
     },
     texture_pool::TexturePool,
     texture_store::TextureStore,
@@ -29,6 +30,7 @@ pub struct Compositor {
     texture_pool: TexturePool,
     effects: EffectPipeline,
     masks: MaskFeatherPipeline,
+    transitions: TransitionPipeline,
     layer_uniform_bind_group_layout: wgpu::BindGroupLayout,
     layer_pipeline: wgpu::RenderPipeline,
     blend_uniform_bind_group_layout: wgpu::BindGroupLayout,
@@ -43,6 +45,8 @@ pub enum CompositorError {
     MissingTexture { texture_id: String },
     #[error("Failed to apply effects: {0}")]
     Effects(#[from] effects::EffectsError),
+    #[error("Failed to apply transition: {0}")]
+    Transitions(#[from] transitions::TransitionsError),
     #[error("Failed to present frame: {0}")]
     Gpu(#[from] gpu::GpuError),
 }
@@ -271,6 +275,7 @@ impl Compositor {
             texture_pool: TexturePool::default(),
             effects: EffectPipeline::new(context),
             masks: MaskFeatherPipeline::new(context),
+            transitions: TransitionPipeline::new(context),
             layer_uniform_bind_group_layout,
             layer_pipeline,
             blend_uniform_bind_group_layout,
@@ -302,40 +307,14 @@ impl Compositor {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("compositor-frame-encoder"),
                 });
-        let mut scene = self.create_cleared_texture(
+        let scene = self.create_cleared_texture(
             context,
             &mut encoder,
             frame.width,
             frame.height,
             frame.clear.color,
         );
-
-        for item in &frame.items {
-            match item {
-                FrameItemDescriptor::Layer(layer) => {
-                    let layer_texture = self.render_layer(context, &mut encoder, frame, layer)?;
-                    scene = self.blend_texture(
-                        context,
-                        &mut encoder,
-                        &scene,
-                        &layer_texture,
-                        layer.blend_mode,
-                        frame.width,
-                        frame.height,
-                    )?;
-                }
-                FrameItemDescriptor::SceneEffect { effect_pass_groups } => {
-                    scene = self.apply_effect_groups(
-                        context,
-                        &mut encoder,
-                        &scene,
-                        frame.width,
-                        frame.height,
-                        effect_pass_groups,
-                    )?;
-                }
-            }
-        }
+        let scene = self.composite_items(context, &mut encoder, frame, &frame.items, scene)?;
 
         context.queue().submit([encoder.finish()]);
         Ok(scene)
@@ -358,40 +337,14 @@ impl Compositor {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("compositor-frame-encoder"),
                 });
-        let mut scene = self.create_cleared_texture(
+        let scene = self.create_cleared_texture(
             context,
             &mut encoder,
             frame.width,
             frame.height,
             frame.clear.color,
         );
-
-        for item in &frame.items {
-            match item {
-                FrameItemDescriptor::Layer(layer) => {
-                    let layer_texture = self.render_layer(context, &mut encoder, frame, layer)?;
-                    scene = self.blend_texture(
-                        context,
-                        &mut encoder,
-                        &scene,
-                        &layer_texture,
-                        layer.blend_mode,
-                        frame.width,
-                        frame.height,
-                    )?;
-                }
-                FrameItemDescriptor::SceneEffect { effect_pass_groups } => {
-                    scene = self.apply_effect_groups(
-                        context,
-                        &mut encoder,
-                        &scene,
-                        frame.width,
-                        frame.height,
-                        effect_pass_groups,
-                    )?;
-                }
-            }
-        }
+        let scene = self.composite_items(context, &mut encoder, frame, &frame.items, scene)?;
 
         context.encode_texture_blit_to_view(
             &mut encoder,
@@ -402,6 +355,86 @@ impl Compositor {
         context.queue().submit([encoder.finish()]);
         surface_texture.present();
         Ok(())
+    }
+
+    /// Composites `items` over `scene` in order and returns the resulting texture.
+    fn composite_items(
+        &mut self,
+        context: &GpuContext,
+        encoder: &mut wgpu::CommandEncoder,
+        frame: &FrameDescriptor,
+        items: &[FrameItemDescriptor],
+        mut scene: wgpu::Texture,
+    ) -> Result<wgpu::Texture, CompositorError> {
+        for item in items {
+            match item {
+                FrameItemDescriptor::Layer(layer) => {
+                    let layer_texture = self.render_layer(context, encoder, frame, layer)?;
+                    scene = self.blend_texture(
+                        context,
+                        encoder,
+                        &scene,
+                        &layer_texture,
+                        layer.blend_mode,
+                        frame.width,
+                        frame.height,
+                    )?;
+                }
+                FrameItemDescriptor::SceneEffect { effect_pass_groups } => {
+                    scene = self.apply_effect_groups(
+                        context,
+                        encoder,
+                        &scene,
+                        frame.width,
+                        frame.height,
+                        effect_pass_groups,
+                    )?;
+                }
+                FrameItemDescriptor::Transition(transition) => {
+                    let blended = self.render_transition(context, encoder, frame, transition)?;
+                    scene = self.blend_texture(
+                        context,
+                        encoder,
+                        &scene,
+                        &blended,
+                        BlendMode::Normal,
+                        frame.width,
+                        frame.height,
+                    )?;
+                }
+            }
+        }
+        Ok(scene)
+    }
+
+    /// Renders both sides of a transition on transparent bases and blends them.
+    fn render_transition(
+        &mut self,
+        context: &GpuContext,
+        encoder: &mut wgpu::CommandEncoder,
+        frame: &FrameDescriptor,
+        transition: &TransitionDescriptor,
+    ) -> Result<wgpu::Texture, CompositorError> {
+        let from_base =
+            self.create_cleared_texture(context, encoder, frame.width, frame.height, [0.0; 4]);
+        let from =
+            self.composite_items(context, encoder, frame, &transition.from_items, from_base)?;
+        let to_base =
+            self.create_cleared_texture(context, encoder, frame.width, frame.height, [0.0; 4]);
+        let to = self.composite_items(context, encoder, frame, &transition.to_items, to_base)?;
+        Ok(self.transitions.apply_with_encoder(
+            context,
+            encoder,
+            ApplyTransitionOptions {
+                from: &from,
+                to: &to,
+                width: frame.width,
+                height: frame.height,
+                shader: &transition.shader,
+                progress: transition.progress,
+                params: &transition.params,
+            },
+        )?)
     }
 
     fn render_layer(

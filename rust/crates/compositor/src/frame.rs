@@ -24,8 +24,10 @@ pub struct CanvasClearDescriptor {
 pub enum FrameItemDescriptor {
     Layer(LayerDescriptor),
     SceneEffect {
+        #[serde(rename = "effectPassGroups")]
         effect_pass_groups: Vec<Vec<EffectPassDescriptor>>,
     },
+    Transition(TransitionDescriptor),
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -38,6 +40,17 @@ pub struct LayerDescriptor {
     #[serde(default)]
     pub effect_pass_groups: Vec<Vec<EffectPassDescriptor>>,
     pub mask: Option<LayerMaskDescriptor>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransitionDescriptor {
+    pub shader: String,
+    pub progress: f32,
+    #[serde(default)]
+    pub params: Vec<f32>,
+    pub from_items: Vec<FrameItemDescriptor>,
+    pub to_items: Vec<FrameItemDescriptor>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -80,4 +93,23 @@ pub struct CanvasTextureDescriptor {
     pub id: String,
     pub width: u32,
     pub height: u32,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::FrameItemDescriptor;
+
+    #[test]
+    fn deserializes_transition_items_from_renderer_json() {
+        let json = r#"{"type":"transition","shader":"whip-pan","progress":0.25,"params":[1,0,0.25],"fromItems":[{"type":"sceneEffect","effectPassGroups":[]}],"toItems":[]}"#;
+        let item: FrameItemDescriptor = serde_json::from_str(json).expect("valid transition json");
+        let FrameItemDescriptor::Transition(transition) = item else {
+            panic!("expected a transition item");
+        };
+        assert_eq!(transition.shader, "whip-pan");
+        assert_eq!(transition.progress, 0.25);
+        assert_eq!(transition.params, vec![1.0, 0.0, 0.25]);
+        assert_eq!(transition.from_items.len(), 1);
+        assert!(transition.to_items.is_empty());
+    }
 }

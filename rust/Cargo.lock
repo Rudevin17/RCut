@@ -134,7 +134,9 @@ dependencies = [
  "gpu",
  "masks",
  "serde",
+ "serde_json",
  "thiserror",
+ "transitions",
 ]
 
 [[package]]
