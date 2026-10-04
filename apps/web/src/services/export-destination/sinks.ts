@@ -27,6 +27,11 @@ export function createBufferSink(): ExportSink {
 	};
 }
 
+/** Tauri rejects with the command's `Err(String)`, a plain string; this makes it an Error so its message reaches the user. */
+function toError(error: unknown): Error {
+	return error instanceof Error ? error : new Error(String(error));
+}
+
 /** Sends each chunk mediabunny writes to the native export stream `id`, at its byte position. */
 export function createStreamWritable({
 	id,
@@ -42,6 +47,8 @@ export function createStreamWritable({
 					"x-rcut-stream-id": String(id),
 					"x-rcut-position": String(chunk.position),
 				},
+			}).catch((error: unknown) => {
+				throw toError(error);
 			});
 		},
 	});
@@ -65,7 +72,11 @@ export function createDiskSink({
 
 	return {
 		async open() {
-			const id = await invoke<number>("export_stream_open", undefined, { headers });
+			const id = await invoke<number>("export_stream_open", undefined, {
+				headers,
+			}).catch((error: unknown) => {
+				throw toError(error);
+			});
 			const target = new StreamTarget(createStreamWritable({ id, invoke }), {
 				chunked: true,
 			});
@@ -73,7 +84,11 @@ export function createDiskSink({
 				target,
 				fastStart: false,
 				async commit() {
-					const path = await invoke<string>("export_stream_finish", { id });
+					const path = await invoke<string>("export_stream_finish", {
+						id,
+					}).catch((error: unknown) => {
+						throw toError(error);
+					});
 					return { kind: "file", path };
 				},
 				async abort() {

@@ -120,6 +120,41 @@ describe("createDiskSink", () => {
 			options: undefined,
 		});
 	});
+
+	// Tauri rejects with the command's Err(String), a plain string.
+	const rejectWith = (message: string) => async () => {
+		throw message;
+	};
+
+	test("open turns a native string rejection into an Error", async () => {
+		const { invoke } = fakeInvoke({
+			results: { export_stream_open: rejectWith("Could not create C:\\x.mp4.0.part") },
+		});
+		const sink = createDiskSink({ destination: { kind: "file", path: "C:\\x.mp4" }, invoke });
+
+		const error: unknown = await sink.open().catch((caught: unknown) => caught);
+
+		expect(error).toBeInstanceOf(Error);
+		expect(error).toHaveProperty("message", "Could not create C:\\x.mp4.0.part");
+	});
+
+	test("commit turns a native string rejection into an Error", async () => {
+		const { invoke } = fakeInvoke({
+			results: {
+				export_stream_open: async () => 2,
+				export_stream_finish: rejectWith("Could not save C:\\x.mp4"),
+			},
+		});
+		const attempt = await createDiskSink({
+			destination: { kind: "file", path: "C:\\x.mp4" },
+			invoke,
+		}).open();
+
+		const error: unknown = await attempt.commit().catch((caught: unknown) => caught);
+
+		expect(error).toBeInstanceOf(Error);
+		expect(error).toHaveProperty("message", "Could not save C:\\x.mp4");
+	});
 });
 
 describe("createStreamWritable", () => {
@@ -146,5 +181,23 @@ describe("createStreamWritable", () => {
 				options: { headers: { "x-rcut-stream-id": "9", "x-rcut-position": "16" } },
 			},
 		]);
+	});
+
+	test("a native string rejection on write becomes an Error", async () => {
+		const { invoke } = fakeInvoke({
+			results: {
+				export_stream_write: async () => {
+					throw "Could not write C:\\x.mp4.0.part";
+				},
+			},
+		});
+		const writer = createStreamWritable({ id: 1, invoke }).getWriter();
+
+		const error: unknown = await writer
+			.write(chunk({ position: 0, bytes: 4 }))
+			.catch((caught: unknown) => caught);
+
+		expect(error).toBeInstanceOf(Error);
+		expect(error).toHaveProperty("message", "Could not write C:\\x.mp4.0.part");
 	});
 });

@@ -123,14 +123,14 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 	}
 
 	/**
-	 * Cancels the output, then aborts the attempt so its partial file is removed.
+	 * Cancels the output (if it was created), then aborts the attempt so its partial file is removed.
 	 * Both share one timeout, so a stuck encoder never blocks cleanup: abort is always started, even when cancel hangs.
 	 */
 	private async cancelOutput({
 		output,
 		attempt,
 	}: {
-		output: Output;
+		output: Output | null;
 		attempt: ExportSinkAttempt;
 	}): Promise<void> {
 		let timer: ReturnType<typeof setTimeout> | undefined;
@@ -138,7 +138,7 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 			timer = setTimeout(resolve, OUTPUT_CANCEL_TIMEOUT_MS);
 		});
 		try {
-			await Promise.race([output.cancel().catch(() => {}), timeout]);
+			if (output) await Promise.race([output.cancel().catch(() => {}), timeout]);
 			await Promise.race([attempt.abort(), timeout]);
 		} finally {
 			clearTimeout(timer);
@@ -229,12 +229,14 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 		let framesEncoded = 0;
 
 		const attempt = await sink.open();
-		const output = new Output({
-			format: new Mp4OutputFormat({ fastStart: attempt.fastStart }),
-			target: attempt.target,
-		});
+		let output: Output | null = null;
 
 		try {
+			output = new Output({
+				format: new Mp4OutputFormat({ fastStart: attempt.fastStart }),
+				target: attempt.target,
+			});
+
 			const videoSource = new CanvasSource(encodeCanvas.canvas, {
 				codec: "avc",
 				bitrate: videoBitrate,
@@ -321,20 +323,16 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 
 			// close() is synchronous; finalize() is what awaits the encoder flush, so it can hang like add() does.
 			// Once finalize has started, output.cancel() can't release a stuck encoder (a mediabunny limitation).
+			videoSource.close();
 			await this.guard({
-				promise: (async () => {
-					videoSource.close();
-					await output.finalize();
-				})(),
+				promise: output.finalize(),
 				stallMessage:
 					"The video encoder stopped responding while finishing the export. Try exporting again.",
 			});
 			this.emit("progress", 1);
 
-			return await this.guard({
-				promise: attempt.commit(),
-				stallMessage: "Saving the export stopped responding. Try exporting again.",
-			});
+			// Not raced against cancel: commit is a local rename, and a cancel arriving now must not orphan or delete a finished export.
+			return await attempt.commit();
 		} catch (error) {
 			await this.cancelOutput({ output, attempt });
 			if (error instanceof ExportCancelled) return null;

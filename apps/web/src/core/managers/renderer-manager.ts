@@ -213,18 +213,16 @@ export class RendererManager {
 				const output = await exporter.export({ rootNode: scene, sink });
 				clearInterval(cancelInterval);
 
+				// A finished export wins over a cancel that arrived too late to stop it.
+				if (output) {
+					return { success: true, output };
+				}
+
 				if (cancelled) {
 					return { success: false, cancelled: true };
 				}
 
-				if (!output) {
-					return { success: false, error: "Export produced no output" };
-				}
-
-				return {
-					success: true,
-					output,
-				};
+				return { success: false, error: "Export produced no output" };
 			} finally {
 				clearInterval(cancelInterval);
 			}
@@ -232,7 +230,7 @@ export class RendererManager {
 			console.error("Export failed:", error);
 			return {
 				success: false,
-				error: error instanceof Error ? error.message : "Unknown export error",
+				error: error instanceof Error ? error.message : String(error),
 			};
 		} finally {
 			audio?.dispose();

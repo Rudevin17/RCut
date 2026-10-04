@@ -133,25 +133,38 @@ impl OpenExport {
             .map_err(|error| format!("Could not write {}: {error}", self.part_path.display()))
     }
 
-    /// Flushes and moves the part file to its final name.
+    /// Flushes and moves the part file to its final name. On failure, nothing
+    /// is left behind: the part file and any reserved placeholder are removed.
     pub fn finish(self) -> Result<PathBuf, String> {
         let Self { file, part_path, destination } = self;
-        file.sync_all()
-            .map_err(|error| format!("Could not save {}: {error}", part_path.display()))?;
+        let discard = |error: String| {
+            let _ = std::fs::remove_file(&part_path);
+            error
+        };
+        let synced = file.sync_all();
         drop(file);
-        let final_path = match destination {
+        if let Err(error) = synced {
+            return Err(discard(format!("Could not save {}: {error}", part_path.display())));
+        }
+        let (final_path, placeholder) = match destination {
             Destination::Folder { dir, file_name } => {
                 // Reserve a unique name atomically, then replace the empty placeholder.
-                let (path, placeholder) = create_unique_export_file(&dir, &file_name)?;
-                drop(placeholder);
-                path
+                match create_unique_export_file(&dir, &file_name) {
+                    Ok((path, placeholder)) => {
+                        drop(placeholder);
+                        (path.clone(), Some(path))
+                    }
+                    Err(error) => return Err(discard(error)),
+                }
             }
-            Destination::Path(path) => path,
+            Destination::Path(path) => (path, None),
         };
-        std::fs::rename(&part_path, &final_path).map_err(|error| {
-            let _ = std::fs::remove_file(&part_path);
-            format!("Could not save {}: {error}", final_path.display())
-        })?;
+        if let Err(error) = std::fs::rename(&part_path, &final_path) {
+            if let Some(placeholder) = &placeholder {
+                let _ = std::fs::remove_file(placeholder);
+            }
+            return Err(discard(format!("Could not save {}: {error}", final_path.display())));
+        }
         Ok(final_path)
     }
 
@@ -174,12 +187,14 @@ pub async fn export_stream_open(
     request: Request<'_>,
     streams: tauri::State<'_, ExportStreams>,
 ) -> Result<u32, String> {
-    let destination = match header(&request, "x-rcut-path") {
-        Ok(path) => Destination::Path(PathBuf::from(path)),
-        Err(_) => Destination::Folder {
+    // Folder mode only when no path header was sent; a malformed path header reports its own error.
+    let destination = if request.headers().contains_key("x-rcut-path") {
+        Destination::Path(PathBuf::from(header(&request, "x-rcut-path")?))
+    } else {
+        Destination::Folder {
             dir: PathBuf::from(header(&request, "x-rcut-folder")?),
             file_name: header(&request, "x-rcut-file-name")?,
-        },
+        }
     };
     let open = OpenExport::create(destination)?;
     let id = streams.next_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -427,6 +442,32 @@ mod tests {
         let part = open.part_path.clone();
         open.abort();
         assert!(!part.exists());
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn failed_finish_removes_the_part_file() {
+        let dir = temp_dir("stream-finish-fail");
+        // A directory at the chosen path makes the final rename fail.
+        let target = dir.join("taken.mp4");
+        fs::create_dir(&target).unwrap();
+        let mut open = OpenExport::create(Destination::Path(target.clone())).unwrap();
+        open.write_at(0, b"data").unwrap();
+        let part = open.part_path.clone();
+        assert!(open.finish().is_err());
+        assert!(!part.exists());
+        assert!(target.is_dir());
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn failed_folder_finish_removes_the_reserved_placeholder() {
+        let dir = temp_dir("stream-finish-placeholder");
+        let mut open = OpenExport::create(Destination::Folder { dir: dir.clone(), file_name: "clip.mp4".into() }).unwrap();
+        open.write_at(0, b"data").unwrap();
+        // Losing the part file makes the final rename fail after the name was reserved.
+        fs::remove_file(&open.part_path).unwrap();
+        assert!(open.finish().is_err());
         assert_eq!(fs::read_dir(&dir).unwrap().count(), 0);
     }
 
