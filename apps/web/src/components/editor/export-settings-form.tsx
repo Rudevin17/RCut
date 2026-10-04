@@ -22,7 +22,7 @@ import {
 	SectionHeader,
 	SectionTitle,
 } from "@/components/section";
-import { EXPORT_FORMAT_VALUES, EXPORT_QUALITY_VALUES } from "@/export";
+import { EXPORT_QUALITY_VALUES } from "@/export";
 import { useExportSettingsStore } from "@/export/export-settings-store";
 import { BUILT_IN_EXPORT_PRESETS, type ExportPreset } from "@/export/presets";
 import {
@@ -209,23 +209,6 @@ export function ExportSettingsForm({
 						</Button>
 					)}
 				</div>
-
-				<Field label="Format">
-					<Select
-						value={settings.format}
-						onValueChange={(value) => {
-							if (isOneOf(EXPORT_FORMAT_VALUES, value)) update({ format: value });
-						}}
-					>
-						<SelectTrigger className="h-8 w-full">
-							<SelectValue />
-						</SelectTrigger>
-						<SelectContent>
-							<SelectItem value="mp4">MP4 (H.264)</SelectItem>
-							<SelectItem value="webm">WebM (VP9)</SelectItem>
-						</SelectContent>
-					</Select>
-				</Field>
 
 				<Field label="Resolution">
 					<Select

@@ -11,20 +11,20 @@ Exports get professional output controls: resolution, frame rate and bitrate. Th
 ## Non-goals
 
 - Natively re-rendering at the export size. Frames are scaled at encode time instead (see Design).
-- New codecs (HEVC, AV1, ProRes). The formats stay MP4 (H.264 + AAC) and WebM (VP9 + Opus).
+- New codecs (HEVC, AV1, ProRes). MP4 (H.264 + AAC) only. WebM was removed after the VP9 software-encoder stalls.
 - Cropping, letterboxing or stretching to a different aspect ratio.
 - File-size estimates, two-pass encoding, and render queues or batch export.
 - Changing the save destination flow (folder / Export as… / Downloads fallback) or file naming.
 
 ## Current state (verified 2026-10-04)
 
-- `apps/web/src/export/index.ts`: `ExportOptions = { format, quality, fps?, includeAudio? }`, with formats `mp4 | webm` and quality `low | medium | high | very_high`.
+- `apps/web/src/export/index.ts`: `ExportOptions = { quality, fps?, includeAudio? }`, with quality `low | medium | high | very_high`.
 - `services/renderer/scene-exporter.ts`:
   - It renders through a `CanvasRenderer` at the **project canvas size**.
-  - Video codec is `avc` for MP4 and `vp9` for WebM.
+  - Video codec is `avc` (MP4).
   - Video and audio bitrate both come from mediabunny's `QUALITY_*` levels. The AAC check probes at 192 kbps.
   - The frame loop steps at the export fps.
-- `components/editor/export-button.tsx`: the popover has Format, Quality and Include audio. It passes `fps: activeProject.settings.fps`.
+- `components/editor/export-button.tsx`: the popover has Quality and Include audio. It passes `fps: activeProject.settings.fps`.
 - `export/export-settings-store.ts` is a persisted zustand store (`rcut-export-settings`) that holds `exportFolder`.
 - Element positions are in **project pixels**, added to the render centre (`compositor/frame-descriptor.ts`, `centerX: renderer.width / 2 + position.x`). Rendering at a size other than the project size would therefore misplace elements, so we scale at encode time instead.
 - mediabunny 1.41.0 video encoding config supports:
@@ -38,7 +38,6 @@ Exports get professional output controls: resolution, frame rate and bitrate. Th
 
 | Field | Values | Default |
 | --- | --- | --- |
-| `format` | `mp4` \| `webm` | `mp4` |
 | `resolution` | `project` \| `720` \| `1080` \| `1440` \| `2160` (short side, px) | `project` |
 | `frameRate` | `project` \| `23.976` \| `24` \| `25` \| `29.97` \| `30` \| `50` \| `59.94` \| `60` | `project` |
 | `videoBitrate` | `{ kind: "quality", quality: ExportQuality }` \| `{ kind: "custom", mbps: number }` | quality `high` |
@@ -62,7 +61,7 @@ The bitrates follow YouTube's recommended SDR upload settings. Where a preset de
 | High quality master | project | project | Quality: very_high | any |
 | Small file | 720 | project | Quality: medium | any |
 
-Every built-in preset uses `mp4`, `variable`, and audio on at 192 kbps.
+Every built-in preset uses `variable`, and audio on at 192 kbps.
 
 ## Pure logic (`apps/web/src/export/`, unit-tested, no UI or encoder imports)
 
@@ -104,7 +103,7 @@ Every built-in preset uses `mp4`, `variable`, and audio on at 192 kbps.
 - **Preset dropdown** at the top, in two groups: *Built-in* and *My presets*.
   - After the user edits any field, the dropdown reads `Custom (from <preset>)`.
   - Custom presets can be deleted with a trash icon.
-- **Visible fields:** Format, Resolution, Frame rate, and Bitrate (Quality select or Custom Mbps).
+- **Visible fields:** Resolution, Frame rate, and Bitrate (Quality select or Custom Mbps).
 - **"Advanced"** section, collapsed by default: VBR/CBR, Include audio with audio bitrate.
 - **Summary line**, e.g. `3840×2160 · 59.94 fps · 60 Mbps · H.264`. A Quality bitrate shows its level name instead of a number.
 - **Warnings** from `getPresetWarnings` appear inline in amber.
@@ -115,8 +114,8 @@ Every built-in preset uses `mp4`, `variable`, and audio on at 192 kbps.
 - An unsupported encoder config fails before rendering, with a clear toast, and no file is written.
 - **Encoder stall guard.** WebView2's software encoder can stop responding without an error.
   - Each frame's render and encode step races a 20 s stall timer and the cancel signal.
-  - If the timer wins, the export fails with "The video encoder stopped responding while exporting (frame N). Try exporting again, or choose MP4." and the user can retry. A stall after frames were added is never retried automatically.
-  - The final flush (`finalize`) has the same guard. If it stalls, the export fails with "The video encoder stopped responding while finishing the export. Try exporting again, or choose MP4."
+  - If the timer wins, the export fails with "The video encoder stopped responding while exporting (frame N). Try exporting again." and the user can retry. A stall after frames were added is never retried automatically.
+  - The final flush (`finalize`) has the same guard. If it stalls, the export fails with "The video encoder stopped responding while finishing the export. Try exporting again."
   - Cancel always ends the export, even while the encoder is stuck. Cancelling the output itself is capped at 2 s.
 - Every other failure path (save errors, the Downloads fallback, cancellation) is unchanged.
 

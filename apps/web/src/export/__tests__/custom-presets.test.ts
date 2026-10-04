@@ -49,9 +49,9 @@ describe("migrateExportSettingsState", () => {
 
 	test("partial last settings are filled from the defaults", () => {
 		const migrated = migrateExportSettingsState({
-			persisted: { exportFolder: null, lastSettings: { format: "webm" }, customPresets: [mine] },
+			persisted: { exportFolder: null, lastSettings: { resolution: "720" }, customPresets: [mine] },
 		});
-		expect(migrated.lastSettings).toEqual({ ...DEFAULT_EXPORT_SETTINGS, format: "webm" });
+		expect(migrated.lastSettings).toEqual({ ...DEFAULT_EXPORT_SETTINGS, resolution: "720" });
 		expect(migrated.customPresets).toEqual([mine]);
 	});
 });

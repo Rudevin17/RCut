@@ -1,4 +1,4 @@
-import type { ExportFormat, ExportQuality } from "@/export";
+import type { ExportQuality } from "@/export";
 
 export const EXPORT_RESOLUTION_VALUES = ["project", "720", "1080", "1440", "2160"] as const;
 export type ExportResolution = (typeof EXPORT_RESOLUTION_VALUES)[number];
@@ -32,7 +32,6 @@ export type ExportVideoBitrate =
 	| { kind: "by-fps"; mbpsUpTo30: number; mbpsAbove30: number };
 
 export interface ExportSettings {
-	format: ExportFormat;
 	resolution: ExportResolution;
 	frameRate: ExportFrameRate;
 	videoBitrate: ExportVideoBitrate;
@@ -42,7 +41,6 @@ export interface ExportSettings {
 }
 
 export const DEFAULT_EXPORT_SETTINGS: ExportSettings = {
-	format: "mp4",
 	resolution: "project",
 	frameRate: "project",
 	videoBitrate: { kind: "quality", quality: "high" },

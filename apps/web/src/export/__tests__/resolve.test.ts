@@ -92,7 +92,6 @@ describe("resolveEncodeParams", () => {
 			projectFps: fps(30),
 		});
 		expect(params).toEqual({
-			format: "mp4",
 			width: 3840,
 			height: 2160,
 			fps: fps(60),
@@ -140,7 +139,7 @@ describe("formatting", () => {
 			projectFps: fps(30),
 		});
 		expect(formatExportSummary({ params })).toBe("3840×2160 · 59.94 fps · 60 Mbps · H.264");
-		const quality = resolveEncodeParams({ settings: { ...DEFAULT_EXPORT_SETTINGS, format: "webm" }, projectSize: landscape, projectFps: fps(30) });
-		expect(formatExportSummary({ params: quality })).toBe("1920×1080 · 30 fps · High quality · VP9");
+		const quality = resolveEncodeParams({ settings: DEFAULT_EXPORT_SETTINGS, projectSize: landscape, projectFps: fps(30) });
+		expect(formatExportSummary({ params: quality })).toBe("1920×1080 · 30 fps · High quality · H.264");
 	});
 });

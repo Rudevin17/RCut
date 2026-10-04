@@ -22,8 +22,8 @@ describe("getExportFileName", () => {
 
 	test("removes trailing dots and spaces", () => {
 		expect(
-			getExportFileName({ projectName: "Final cut. . ", extension: ".webm" }),
-		).toBe("Final cut.webm");
+			getExportFileName({ projectName: "Final cut. . ", extension: ".mp4" }),
+		).toBe("Final cut.mp4");
 	});
 
 	test("falls back to Untitled for empty names", () => {

@@ -13,8 +13,8 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/utils/ui";
 import {
-	getExportMimeType,
-	getExportFileExtension,
+	EXPORT_FILE_EXTENSION,
+	EXPORT_MIME_TYPE,
 	downloadBuffer,
 } from "@/export";
 import { Check, Copy, Download, RotateCcw } from "lucide-react";
@@ -182,10 +182,9 @@ function ExportPopover({
 	}: { saveAs?: boolean } = {}) => {
 		if (!activeProject) return;
 
-		const extension = getExportFileExtension({ format: settings.format });
 		const fileName = getExportFileName({
 			projectName: activeProject.metadata.name,
-			extension,
+			extension: EXPORT_FILE_EXTENSION,
 		});
 
 		let destination: ExportDestination = { kind: "download" };
@@ -199,7 +198,7 @@ function ExportPopover({
 				const path = await pickExportFile({
 					folder: targetFolder,
 					fileName,
-					extension: settings.format,
+					extension: "mp4",
 				}).catch((error) => {
 					toast.error("Couldn't open the save dialog", {
 						description: errorMessage({ error }),
@@ -208,8 +207,8 @@ function ExportPopover({
 				});
 				if (!path) return;
 				// Check before rendering, so a wrong extension doesn't waste a render.
-				if (!path.toLowerCase().endsWith(extension)) {
-					toast.error(`The file name must end in ${extension}`);
+				if (!path.toLowerCase().endsWith(EXPORT_FILE_EXTENSION)) {
+					toast.error(`The file name must end in ${EXPORT_FILE_EXTENSION}`);
 					return;
 				}
 				destination = { kind: "file", path };
@@ -231,7 +230,7 @@ function ExportPopover({
 				buffer: result.buffer,
 				destination,
 				fileName,
-				mimeType: getExportMimeType({ format: settings.format }),
+				mimeType: EXPORT_MIME_TYPE,
 			});
 
 			editor.project.clearExportState();

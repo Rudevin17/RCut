@@ -1,5 +1,5 @@
 import type { FrameRate } from "opencut-wasm";
-import type { ExportFormat, ExportQuality } from "@/export";
+import type { ExportQuality } from "@/export";
 import type { ExportPreset } from "@/export/presets";
 import {
 	CUSTOM_MBPS_MAX,
@@ -19,7 +19,6 @@ export interface ExportSize {
 
 /** Everything the encoder needs, resolved against the project. */
 export interface EncodeParams {
-	format: ExportFormat;
 	width: number;
 	height: number;
 	fps: FrameRate;
@@ -48,8 +47,6 @@ const FRAME_RATES: Record<Exclude<ExportFrameRate, "project">, FrameRate> = {
 	"59.94": { numerator: 60_000, denominator: 1_001 },
 	"60": { numerator: 60, denominator: 1 },
 };
-
-const CODEC_LABELS: Record<ExportFormat, string> = { mp4: "H.264", webm: "VP9" };
 
 function roundToEven(value: number): number {
 	return Math.max(2, Math.round(value / 2) * 2);
@@ -122,7 +119,6 @@ export function resolveEncodeParams({
 	const { width, height } = resolveExportSize({ projectSize, resolution: settings.resolution });
 	const fps = resolveExportFps({ projectFps, frameRate: settings.frameRate });
 	return {
-		format: settings.format,
 		width,
 		height,
 		fps,
@@ -168,5 +164,5 @@ export function formatExportSummary({ params }: { params: EncodeParams }): strin
 		typeof params.videoBitrate === "number"
 			? `${Number((params.videoBitrate / 1_000_000).toFixed(1))} Mbps`
 			: `${EXPORT_QUALITY_LABELS[params.videoBitrate]} quality`;
-	return `${params.width}×${params.height} · ${formatFrameRate(params.fps)} fps · ${bitrate} · ${CODEC_LABELS[params.format]}`;
+	return `${params.width}×${params.height} · ${formatFrameRate(params.fps)} fps · ${bitrate} · H.264`;
 }

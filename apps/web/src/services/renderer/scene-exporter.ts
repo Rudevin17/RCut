@@ -3,7 +3,6 @@ import EventEmitter from "eventemitter3";
 import {
 	Output,
 	Mp4OutputFormat,
-	WebMOutputFormat,
 	BufferTarget,
 	CanvasSource,
 	AudioBufferSource,
@@ -30,7 +29,6 @@ type ExportParams = {
 	audioBuffer?: AudioBuffer;
 };
 
-type VideoCodec = "avc" | "vp9";
 type HardwareAcceleration = "no-preference" | "prefer-hardware" | "prefer-software";
 
 /** WebView2's software encoder sometimes stops responding without any error, so a frame that takes this long fails the export. */
@@ -141,18 +139,15 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 	}: {
 		rootNode: RootNode;
 	}): Promise<ArrayBuffer | null> {
-		const { format } = this.encode;
-		const codec: VideoCodec = format === "webm" ? "vp9" : "avc";
 		const videoBitrate =
 			typeof this.encode.videoBitrate === "number"
 				? this.encode.videoBitrate
 				: qualityMap[this.encode.videoBitrate];
 		const picked = await this.pickHardwareAcceleration({
-			codec,
 			bitrate: videoBitrate,
 		});
 		const encodeCanvas = this.createEncodeCanvas();
-		const params = { rootNode, encodeCanvas, codec, videoBitrate };
+		const params = { rootNode, encodeCanvas, videoBitrate };
 
 		let buffer: ArrayBuffer | null;
 		try {
@@ -202,16 +197,14 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 		rootNode,
 		hardwareAcceleration,
 		encodeCanvas,
-		codec,
 		videoBitrate,
 	}: {
 		rootNode: RootNode;
 		hardwareAcceleration: HardwareAcceleration;
 		encodeCanvas: { canvas: HTMLCanvasElement | OffscreenCanvas; draw: () => void };
-		codec: VideoCodec;
 		videoBitrate: number | Quality;
 	}): Promise<ArrayBuffer | null> {
-		const { format, fps, bitrateMode, includeAudio, audioBitrate } = this.encode;
+		const { fps, bitrateMode, includeAudio, audioBitrate } = this.encode;
 		const fpsFloat = frameRateToFloat(fps);
 		const ticksPerFrame = Math.round(
 			(TICKS_PER_SECOND * fps.denominator) / fps.numerator,
@@ -220,13 +213,13 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 		let framesEncoded = 0;
 
 		const output = new Output({
-			format: format === "webm" ? new WebMOutputFormat() : new Mp4OutputFormat(),
+			format: new Mp4OutputFormat(),
 			target: new BufferTarget(),
 		});
 
 		try {
 			const videoSource = new CanvasSource(encodeCanvas.canvas, {
-				codec,
+				codec: "avc",
 				bitrate: videoBitrate,
 				bitrateMode,
 				hardwareAcceleration,
@@ -236,9 +229,9 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 
 			let audioSource: AudioBufferSource | null = null;
 			if (includeAudio && this.audioBuffer) {
-				let audioCodec: "aac" | "opus" = format === "webm" ? "opus" : "aac";
+				let audioCodec: "aac" | "opus" = "aac";
 
-				if (audioCodec === "aac" && typeof AudioEncoder !== "undefined") {
+				if (typeof AudioEncoder !== "undefined") {
 					const { supported } = await AudioEncoder.isConfigSupported({
 						codec: "mp4a.40.2",
 						sampleRate: this.audioBuffer.sampleRate,
@@ -270,7 +263,7 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 
 				const timeTicks = i * ticksPerFrame;
 				const timeSeconds = mediaTimeToSeconds({ time: timeTicks });
-				const stallMessage = `The video encoder stopped responding while exporting (frame ${i + 1}). Try exporting again, or choose MP4.`;
+				const stallMessage = `The video encoder stopped responding while exporting (frame ${i + 1}). Try exporting again.`;
 				await this.guard({
 					promise: this.renderer.render({ node: rootNode, time: timeTicks }),
 					stallMessage,
@@ -298,7 +291,7 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 					await output.finalize();
 				})(),
 				stallMessage:
-					"The video encoder stopped responding while finishing the export. Try exporting again, or choose MP4.",
+					"The video encoder stopped responding while finishing the export. Try exporting again.",
 			});
 			this.emit("progress", 1);
 
@@ -312,16 +305,14 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 
 	/** Prefers hardware encoding, falls back to the browser's choice, and fails clearly if neither can encode. */
 	private async pickHardwareAcceleration({
-		codec,
 		bitrate,
 	}: {
-		codec: VideoCodec;
 		bitrate: number | Quality;
 	}): Promise<HardwareAcceleration> {
 		const { width, height, bitrateMode, fps } = this.encode;
 		const candidates: HardwareAcceleration[] = ["prefer-hardware", "no-preference"];
 		for (const hardwareAcceleration of candidates) {
-			const supported = await canEncodeVideo(codec, {
+			const supported = await canEncodeVideo("avc", {
 				width,
 				height,
 				bitrate,
@@ -330,9 +321,8 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 			});
 			if (supported) return hardwareAcceleration;
 		}
-		const codecLabel = codec === "vp9" ? "VP9" : "H.264";
 		throw new Error(
-			`This computer can't encode ${width}×${height} at ${formatFrameRate(fps)} fps as ${codecLabel}. Try a lower resolution or frame rate.`,
+			`This computer can't encode ${width}×${height} at ${formatFrameRate(fps)} fps as H.264. Try a lower resolution or frame rate.`,
 		);
 	}
 

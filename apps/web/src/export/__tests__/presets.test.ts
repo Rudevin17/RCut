@@ -21,7 +21,6 @@ describe("built-in export presets", () => {
 
 	test("all presets share the common settings", () => {
 		for (const preset of BUILT_IN_EXPORT_PRESETS) {
-			expect(preset.settings.format).toBe("mp4");
 			expect(preset.settings.frameRate).toBe("project");
 			expect(preset.settings.bitrateMode).toBe("variable");
 			expect(preset.settings.includeAudio).toBe(true);

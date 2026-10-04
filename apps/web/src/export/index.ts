@@ -1,4 +1,5 @@
-import { EXPORT_MIME_TYPES } from "./mime-types";
+export const EXPORT_MIME_TYPE = "video/mp4";
+export const EXPORT_FILE_EXTENSION = ".mp4";
 
 export const EXPORT_QUALITY_VALUES = [
 	"low",
@@ -7,9 +8,6 @@ export const EXPORT_QUALITY_VALUES = [
 	"very_high",
 ] as const;
 
-export const EXPORT_FORMAT_VALUES = ["mp4", "webm"] as const;
-
-export type ExportFormat = (typeof EXPORT_FORMAT_VALUES)[number];
 export type ExportQuality = (typeof EXPORT_QUALITY_VALUES)[number];
 
 export interface ExportResult {
@@ -23,22 +21,6 @@ export interface ExportState {
 	isExporting: boolean;
 	progress: number;
 	result: ExportResult | null;
-}
-
-export function getExportMimeType({
-	format,
-}: {
-	format: ExportFormat;
-}): string {
-	return EXPORT_MIME_TYPES[format];
-}
-
-export function getExportFileExtension({
-	format,
-}: {
-	format: ExportFormat;
-}): string {
-	return `.${format}`;
 }
 
 export function downloadBuffer({

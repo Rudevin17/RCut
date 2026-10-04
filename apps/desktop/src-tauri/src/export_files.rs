@@ -9,7 +9,7 @@ use percent_encoding::percent_decode_str;
 use tauri::ipc::{InvokeBody, Request};
 use tauri::{AppHandle, Manager};
 
-const EXPORT_EXTENSIONS: [&str; 2] = ["mp4", "webm"];
+const EXPORT_EXTENSIONS: [&str; 1] = ["mp4"];
 
 /// Candidate paths for an export: `dir/file_name`, then
 /// `dir/<stem> (n).<ext>` for n = 2, 3, ...
@@ -54,7 +54,7 @@ fn validate_file_name(file_name: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Accepts only the export formats RCut produces (.mp4, .webm), in any case.
+/// Accepts only the export format RCut produces (.mp4), in any case.
 fn validate_export_extension(path: &Path) -> Result<(), String> {
     let supported = path
         .extension()
@@ -66,7 +66,7 @@ fn validate_export_extension(path: &Path) -> Result<(), String> {
         });
     if !supported {
         return Err(format!(
-            "Exports must be saved as .mp4 or .webm: {}",
+            "Exports must be saved as .mp4: {}",
             path.display()
         ));
     }
@@ -236,13 +236,8 @@ mod tests {
     }
 
     #[test]
-    fn accepts_mp4_and_webm_in_any_case() {
-        for path in [
-            "C:\\out\\a.mp4",
-            "C:\\out\\a.MP4",
-            "C:\\out\\a.webm",
-            "C:\\out\\a.WebM",
-        ] {
+    fn accepts_mp4_in_any_case() {
+        for path in ["C:\\out\\a.mp4", "C:\\out\\a.MP4"] {
             assert!(validate_export_extension(Path::new(path)).is_ok(), "{path}");
         }
     }
@@ -254,6 +249,8 @@ mod tests {
             "C:\\out\\a",
             "C:\\out\\a.mp4.bat",
             "C:\\out\\mp4",
+            "C:\\out\\a.webm",
+            "C:\\out\\a.WebM",
         ] {
             assert!(
                 validate_export_extension(Path::new(path)).is_err(),
