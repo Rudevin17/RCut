@@ -38,6 +38,21 @@ pub const TRANSITION_SHADERS: &[(&str, &str)] = &[
     ("zoom-punch", include_str!("shaders/zoom_punch.wgsl")),
     ("spin-blur", include_str!("shaders/spin_blur.wgsl")),
     ("shake-hit", include_str!("shaders/shake_hit.wgsl")),
+    ("fade-color", include_str!("shaders/fade_color.wgsl")),
+    ("slide", include_str!("shaders/slide.wgsl")),
+    ("push", include_str!("shaders/push.wgsl")),
+    ("zoom-in-out", include_str!("shaders/zoom_in_out.wgsl")),
+    ("wipe", include_str!("shaders/wipe.wgsl")),
+    ("circle-open", include_str!("shaders/circle_open.wgsl")),
+    ("cross-zoom", include_str!("shaders/cross_zoom.wgsl")),
+    ("dreamy-zoom", include_str!("shaders/dreamy_zoom.wgsl")),
+    ("linear-blur", include_str!("shaders/linear_blur.wgsl")),
+    ("film-burn", include_str!("shaders/film_burn.wgsl")),
+    ("overexposure", include_str!("shaders/overexposure.wgsl")),
+    ("swirl", include_str!("shaders/swirl.wgsl")),
+    ("cube", include_str!("shaders/cube.wgsl")),
+    ("page-curl", include_str!("shaders/page_curl.wgsl")),
+    ("crosswarp", include_str!("shaders/crosswarp.wgsl")),
 ];
 
 pub fn transition_shader_source(body: &str) -> String {
