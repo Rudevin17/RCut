@@ -3,7 +3,7 @@ const MASTER_LIMITER_KNEE_DB = 0;
 const MASTER_LIMITER_RATIO = 20;
 const MASTER_LIMITER_ATTACK_SECONDS = 0.001;
 const MASTER_LIMITER_RELEASE_SECONDS = 0.12;
-const MASTER_OUTPUT_HEADROOM = 0.98;
+export const MASTER_OUTPUT_HEADROOM = 0.98;
 
 export function getAudioBufferPeak({
 	audioBuffer,
@@ -84,7 +84,7 @@ export async function applyAudioMasteringToBuffer({
 	return renderedBuffer;
 }
 
-function clampAudioBufferPeak({
+export function clampAudioBufferPeak({
 	audioBuffer,
 	maxPeak,
 }: {
