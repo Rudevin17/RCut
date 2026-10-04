@@ -99,27 +99,19 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 		this.resolveCancel();
 	}
 
-	/** Awaits `promise`, but gives up when the user cancels (ExportCancelled) or it takes longer than STALL_TIMEOUT_MS (an Error naming `frame`). */
+	/** Awaits `promise`, but gives up when the user cancels (ExportCancelled) or it takes longer than STALL_TIMEOUT_MS (an Error with `stallMessage`). */
 	private async guard<T>({
 		promise,
-		frame,
+		stallMessage,
 	}: {
 		promise: Promise<T>;
-		frame: number;
+		stallMessage: string;
 	}): Promise<T> {
 		// If the race is lost, the abandoned promise may still reject later; that must not surface.
 		promise.catch(() => {});
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		const stalled = new Promise<never>((_, reject) => {
-			timer = setTimeout(
-				() =>
-					reject(
-						new Error(
-							`The video encoder stopped responding while exporting (frame ${frame}). Try exporting again, or choose MP4.`,
-						),
-					),
-				STALL_TIMEOUT_MS,
-			);
+			timer = setTimeout(() => reject(new Error(stallMessage)), STALL_TIMEOUT_MS);
 		});
 		const cancelled = this.cancelSignal.then((): never => {
 			throw new ExportCancelled();
@@ -269,15 +261,15 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 
 				const timeTicks = i * ticksPerFrame;
 				const timeSeconds = mediaTimeToSeconds({ time: timeTicks });
-				const frame = i + 1;
+				const stallMessage = `The video encoder stopped responding while exporting (frame ${i + 1}). Try exporting again, or choose MP4.`;
 				await this.guard({
 					promise: this.renderer.render({ node: rootNode, time: timeTicks }),
-					frame,
+					stallMessage,
 				});
 				encodeCanvas.draw();
 				await this.guard({
 					promise: videoSource.add(timeSeconds, 1 / fpsFloat),
-					frame,
+					stallMessage,
 				});
 				framesEncoded++;
 
@@ -289,8 +281,15 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 				return null;
 			}
 
-			videoSource.close();
-			await output.finalize();
+			// close() flushes the encoder, so it can hang like add() does.
+			await this.guard({
+				promise: (async () => {
+					await videoSource.close();
+					await output.finalize();
+				})(),
+				stallMessage:
+					"The video encoder stopped responding while finishing the export. Try exporting again, or choose MP4.",
+			});
 			this.emit("progress", 1);
 
 			return output.target.buffer;
