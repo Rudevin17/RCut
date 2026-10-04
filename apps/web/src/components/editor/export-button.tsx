@@ -97,10 +97,16 @@ async function saveExport({
 			},
 		});
 	} catch (error) {
-		toast.error("Couldn't save the export", {
-			description: error instanceof Error ? error.message : String(error),
+		// Keep the rendered export: hand it to the browser download instead.
+		downloadBuffer({ buffer, filename: fileName, mimeType });
+		toast.error("Couldn't save the export, so it went to Downloads instead", {
+			description: errorMessage({ error }),
 		});
 	}
+}
+
+function errorMessage({ error }: { error: unknown }): string {
+	return error instanceof Error ? error.message : String(error);
 }
 
 export function ExportButton() {
@@ -180,15 +186,24 @@ function ExportPopover({
 		getDefaultExportFolder()
 			.then(setDefaultFolder)
 			.catch((error) =>
-				console.error("Failed to read the Downloads folder:", error),
+				toast.error("Couldn't find the Downloads folder", {
+					description: errorMessage({ error }),
+				}),
 			);
 	}, [isNativeExport, exportFolder]);
 
 	const targetFolder = exportFolder ?? defaultFolder;
 
-	const handleChangeFolder = async () => {
-		const folder = await pickExportFolder({ currentFolder: targetFolder });
-		if (folder) setExportFolder({ folder });
+	const handleChangeFolder = () => {
+		pickExportFolder({ currentFolder: targetFolder })
+			.then((folder) => {
+				if (folder) setExportFolder({ folder });
+			})
+			.catch((error) =>
+				toast.error("Couldn't open the folder picker", {
+					description: errorMessage({ error }),
+				}),
+			);
 	};
 
 	const handleExport = async ({
