@@ -27,6 +27,9 @@ type ClipSource =
 	| { kind: "reader"; reader: AudioSourceReader }
 	| { kind: "block"; block: PcmBlock };
 
+/** A clip to mix, with its element name for error messages. */
+type ClipEntry = { clip: AudioMixClip; source: ClipSource; name: string };
+
 /** Streams the timeline's audio as mixed, mastered windows of CHUNK_SECONDS. */
 export class TimelineAudioStream {
 	readonly numberOfChannels = CHANNELS;
@@ -36,7 +39,7 @@ export class TimelineAudioStream {
 
 	readonly sampleRate: number;
 	readonly totalSamples: number;
-	private readonly clips: Array<{ clip: AudioMixClip; source: ClipSource }>;
+	private readonly clips: ClipEntry[];
 	private readonly readers: AudioSourceReader[];
 
 	private constructor({
@@ -47,7 +50,7 @@ export class TimelineAudioStream {
 	}: {
 		sampleRate: number;
 		totalSamples: number;
-		clips: Array<{ clip: AudioMixClip; source: ClipSource }>;
+		clips: ClipEntry[];
 		readers: AudioSourceReader[];
 	}) {
 		this.sampleRate = sampleRate;
@@ -68,42 +71,53 @@ export class TimelineAudioStream {
 		sampleRate: number;
 	}): Promise<TimelineAudioStream | null> {
 		const readersByKey = new Map<string, AudioSourceReader | null>();
-		const clips: Array<{ clip: AudioMixClip; source: ClipSource }> = [];
+		const clips: ClipEntry[] = [];
 
-		for (const { element, mediaAsset } of collectAudibleCandidates({ tracks, mediaAssets })) {
-			if (isElementMuted({ element })) continue;
-			const file = await resolveSourceFile({ element, mediaAsset });
-			if (!file) continue;
-			const sourceKey = mediaAsset?.id ?? element.id;
-			if (!readersByKey.has(sourceKey)) {
-				readersByKey.set(sourceKey, await openReader({ file: file.blob }));
+		try {
+			for (const { element, mediaAsset } of collectAudibleCandidates({ tracks, mediaAssets })) {
+				if (isElementMuted({ element })) continue;
+				const file = await resolveSourceFile({ element, mediaAsset });
+				if (!file) continue;
+				const sourceKey = mediaAsset?.id ?? element.id;
+				if (!readersByKey.has(sourceKey)) {
+					readersByKey.set(sourceKey, await openReader({ file: file.blob, name: element.name }));
+				}
+				const reader = readersByKey.get(sourceKey);
+				if (!reader) continue;
+
+				const rate = getEffectiveRateAt({ retime: element.retime });
+				const clip: AudioMixClip = {
+					id: element.id,
+					sourceKey,
+					startTime: element.startTime / TICKS_PER_SECOND,
+					duration: element.duration / TICKS_PER_SECOND,
+					trimStart: element.trimStart / TICKS_PER_SECOND,
+					rate,
+					maintainPitch:
+						rate !== 1 &&
+						shouldMaintainPitch({ rate, maintainPitch: element.retime?.maintainPitch }),
+					volume: resolveEffectiveAudioGain({ element, localTime: 0 }),
+					gainAt: hasAnimatedVolume({ element })
+						? (clipTime) => resolveEffectiveAudioGain({ element, localTime: clipTime })
+						: undefined,
+				};
+
+				if (clip.maintainPitch) {
+					const block = await prerenderPitchedClip({ clip, reader, sampleRate, retime: element.retime });
+					if (block) {
+						clips.push({
+							clip: { ...clip, trimStart: 0, rate: 1 },
+							source: { kind: "block", block },
+							name: element.name,
+						});
+					}
+					continue;
+				}
+				clips.push({ clip, source: { kind: "reader", reader }, name: element.name });
 			}
-			const reader = readersByKey.get(sourceKey);
-			if (!reader) continue;
-
-			const rate = getEffectiveRateAt({ retime: element.retime });
-			const clip: AudioMixClip = {
-				id: element.id,
-				sourceKey,
-				startTime: element.startTime / TICKS_PER_SECOND,
-				duration: element.duration / TICKS_PER_SECOND,
-				trimStart: element.trimStart / TICKS_PER_SECOND,
-				rate,
-				maintainPitch:
-					rate !== 1 &&
-					shouldMaintainPitch({ rate, maintainPitch: element.retime?.maintainPitch }),
-				volume: resolveEffectiveAudioGain({ element, localTime: 0 }),
-				gainAt: hasAnimatedVolume({ element })
-					? (clipTime) => resolveEffectiveAudioGain({ element, localTime: clipTime })
-					: undefined,
-			};
-
-			if (clip.maintainPitch) {
-				const block = await prerenderPitchedClip({ clip, reader, sampleRate, retime: element.retime });
-				if (block) clips.push({ clip: { ...clip, trimStart: 0, rate: 1 }, source: { kind: "block", block } });
-				continue;
-			}
-			clips.push({ clip, source: { kind: "reader", reader } });
+		} catch (error) {
+			for (const reader of readersByKey.values()) reader?.dispose();
+			throw error;
 		}
 
 		const readers = [...readersByKey.values()].filter((reader): reader is AudioSourceReader => !!reader);
@@ -143,13 +157,20 @@ export class TimelineAudioStream {
 
 		const length = window.endSample - window.startSample;
 		const output: [Float32Array, Float32Array] = [new Float32Array(length), new Float32Array(length)];
-		for (const { clip, source } of this.clips) {
+		for (const { clip, source, name } of this.clips) {
 			const range = getClipSourceRange({ clip, window, sampleRate: this.sampleRate });
 			if (!range) continue;
-			const block =
-				source.kind === "block"
-					? source.block
-					: await source.reader.read({ start: range.sourceStart, end: range.sourceEnd });
+			let block: PcmBlock | null;
+			if (source.kind === "block") {
+				block = source.block;
+			} else {
+				try {
+					block = await source.reader.read({ start: range.sourceStart, end: range.sourceEnd });
+				} catch (cause) {
+					const time = formatTimelineTime({ seconds: window.startSample / this.sampleRate });
+					throw new Error(`Couldn't decode the audio of "${name}" around ${time}.`, { cause });
+				}
+			}
 			if (!block) continue;
 			mixClipIntoWindow({ clip, block, window, sampleRate: this.sampleRate, output });
 		}
@@ -215,14 +236,29 @@ async function resolveSourceFile({
 	return { blob: mediaAsset.file };
 }
 
-/** Opens a source reader, or returns null (with a warning) when the file can't be demuxed. */
-async function openReader({ file }: { file: Blob }): Promise<AudioSourceReader | null> {
+/** Opens a source reader (null when the file has no audio track); throws a named error when it can't be read. */
+async function openReader({
+	file,
+	name,
+}: {
+	file: Blob;
+	name: string;
+}): Promise<AudioSourceReader | null> {
 	try {
 		return await AudioSourceReader.open({ file });
-	} catch (error) {
-		console.warn("Failed to open audio source:", error);
-		return null;
+	} catch (cause) {
+		throw new Error(
+			`Couldn't read the audio of "${name}". The file may be missing or unsupported.`,
+			{ cause },
+		);
 	}
+}
+
+/** Formats seconds as m:ss. */
+function formatTimelineTime({ seconds }: { seconds: number }): string {
+	const wholeSeconds = Math.floor(seconds);
+	const minutes = Math.floor(wholeSeconds / 60);
+	return `${minutes}:${String(wholeSeconds % 60).padStart(2, "0")}`;
 }
 
 /** Renders a pitch-preserving retimed clip once, as a block mixed at rate 1 from clip time 0. */

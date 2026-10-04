@@ -5,26 +5,6 @@ const MASTER_LIMITER_ATTACK_SECONDS = 0.001;
 const MASTER_LIMITER_RELEASE_SECONDS = 0.12;
 export const MASTER_OUTPUT_HEADROOM = 0.98;
 
-export function getAudioBufferPeak({
-	audioBuffer,
-}: {
-	audioBuffer: AudioBuffer;
-}): number {
-	let peak = 0;
-
-	for (let channel = 0; channel < audioBuffer.numberOfChannels; channel++) {
-		const channelData = audioBuffer.getChannelData(channel);
-		for (let index = 0; index < channelData.length; index++) {
-			const magnitude = Math.abs(channelData[index]);
-			if (magnitude > peak) {
-				peak = magnitude;
-			}
-		}
-	}
-
-	return peak;
-}
-
 export function createAudioMasteringChain({
 	audioContext,
 	destination,
@@ -50,38 +30,6 @@ export function createAudioMasteringChain({
 	outputGain.connect(destination);
 
 	return { input };
-}
-
-export async function applyAudioMasteringToBuffer({
-	audioBuffer,
-}: {
-	audioBuffer: AudioBuffer;
-}): Promise<AudioBuffer> {
-	if (getAudioBufferPeak({ audioBuffer }) <= MASTER_OUTPUT_HEADROOM) {
-		return audioBuffer;
-	}
-
-	const offlineContext = new OfflineAudioContext(
-		audioBuffer.numberOfChannels,
-		Math.max(1, audioBuffer.length),
-		audioBuffer.sampleRate,
-	);
-	const source = offlineContext.createBufferSource();
-	source.buffer = audioBuffer;
-
-	const { input } = createAudioMasteringChain({
-		audioContext: offlineContext,
-		destination: offlineContext.destination,
-	});
-	source.connect(input);
-	source.start(0);
-
-	const renderedBuffer = await offlineContext.startRendering();
-	clampAudioBufferPeak({
-		audioBuffer: renderedBuffer,
-		maxPeak: MASTER_OUTPUT_HEADROOM,
-	});
-	return renderedBuffer;
 }
 
 export function clampAudioBufferPeak({
