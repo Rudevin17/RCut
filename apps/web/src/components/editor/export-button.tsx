@@ -10,10 +10,7 @@ import {
 	PopoverTrigger,
 } from "@/components/ui/popover";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Progress } from "@/components/ui/progress";
-import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/utils/ui";
 import {
 	getExportMimeType,
@@ -21,20 +18,9 @@ import {
 	downloadBuffer,
 } from "@/export";
 import { Check, Copy, Download, RotateCcw } from "lucide-react";
-import {
-	EXPORT_FORMAT_VALUES,
-	EXPORT_QUALITY_VALUES,
-	type ExportFormat,
-	type ExportQuality,
-} from "@/export";
-import {
-	Section,
-	SectionContent,
-	SectionHeader,
-	SectionTitle,
-} from "@/components/section";
+import { ExportSettingsForm } from "@/components/editor/export-settings-form";
 import { useEditor } from "@/editor/use-editor";
-import { DEFAULT_EXPORT_SETTINGS } from "@/export/settings";
+import type { ExportSettings } from "@/export/settings";
 import { getExportFileName } from "@/export/export-file-name";
 import { useExportSettingsStore } from "@/export/export-settings-store";
 import {
@@ -46,14 +32,6 @@ import {
 	saveExportAs,
 	saveExportToFolder,
 } from "@/services/export-destination";
-
-function isExportFormat(value: string): value is ExportFormat {
-	return EXPORT_FORMAT_VALUES.some((formatValue) => formatValue === value);
-}
-
-function isExportQuality(value: string): value is ExportQuality {
-	return EXPORT_QUALITY_VALUES.some((qualityValue) => qualityValue === value);
-}
 
 type ExportDestination =
 	| { kind: "folder"; folder: string }
@@ -167,14 +145,11 @@ function ExportPopover({
 	const activeProject = useEditor((e) => e.project.getActive());
 	const exportState = useEditor((e) => e.project.getExportState());
 	const { isExporting, progress, result: exportResult } = exportState;
-	const [format, setFormat] = useState<ExportFormat>(DEFAULT_EXPORT_SETTINGS.format);
-	const [quality, setQuality] = useState<ExportQuality>("high");
-	const [shouldIncludeAudio, setShouldIncludeAudio] = useState<boolean>(
-		DEFAULT_EXPORT_SETTINGS.includeAudio,
-	);
 
 	const isNativeExport = isNativeExportAvailable();
-	const { exportFolder, setExportFolder } = useExportSettingsStore();
+	const { exportFolder, setExportFolder, lastSettings, setLastSettings } =
+		useExportSettingsStore();
+	const [settings, setSettings] = useState<ExportSettings>(lastSettings);
 	const [defaultFolder, setDefaultFolder] = useState<string | null>(null);
 
 	useEffect(() => {
@@ -207,7 +182,7 @@ function ExportPopover({
 	}: { saveAs?: boolean } = {}) => {
 		if (!activeProject) return;
 
-		const extension = getExportFileExtension({ format });
+		const extension = getExportFileExtension({ format: settings.format });
 		const fileName = getExportFileName({
 			projectName: activeProject.metadata.name,
 			extension,
@@ -224,7 +199,7 @@ function ExportPopover({
 				const path = await pickExportFile({
 					folder: targetFolder,
 					fileName,
-					extension: format,
+					extension: settings.format,
 				}).catch((error) => {
 					toast.error("Couldn't open the save dialog", {
 						description: errorMessage({ error }),
@@ -243,14 +218,7 @@ function ExportPopover({
 			}
 		}
 
-		const result = await editor.project.export({
-			settings: {
-				...DEFAULT_EXPORT_SETTINGS,
-				format,
-				videoBitrate: { kind: "quality", quality },
-				includeAudio: shouldIncludeAudio,
-			},
-		});
+		const result = await editor.project.export({ settings });
 
 		if (result.cancelled) {
 			editor.project.clearExportState();
@@ -258,11 +226,12 @@ function ExportPopover({
 		}
 
 		if (result.success && result.buffer) {
+			setLastSettings({ settings });
 			await saveExport({
 				buffer: result.buffer,
 				destination,
 				fileName,
-				mimeType: getExportMimeType({ format }),
+				mimeType: getExportMimeType({ format: settings.format }),
 			});
 
 			editor.project.clearExportState();
@@ -275,7 +244,7 @@ function ExportPopover({
 	};
 
 	return (
-		<PopoverContent className="bg-background mr-4 flex w-80 flex-col p-0">
+		<PopoverContent className="bg-background mr-4 flex w-96 flex-col p-0">
 			{exportResult && !exportResult.success ? (
 				<ExportError
 					error={exportResult.error || "Unknown error occurred"}
@@ -292,95 +261,12 @@ function ExportPopover({
 					<div className="flex flex-col gap-4">
 						{!isExporting && (
 							<>
-								<div className="flex flex-col">
-									<Section
-										collapsible
-										defaultOpen={false}
-										showTopBorder={false}
-									>
-										<SectionHeader>
-											<SectionTitle>Format</SectionTitle>
-										</SectionHeader>
-										<SectionContent>
-											<RadioGroup
-												value={format}
-												onValueChange={(value) => {
-													if (isExportFormat(value)) {
-														setFormat(value);
-													}
-												}}
-											>
-												<div className="flex items-center space-x-2">
-													<RadioGroupItem value="mp4" id="mp4" />
-													<Label htmlFor="mp4">
-														MP4 (H.264) - Better compatibility
-													</Label>
-												</div>
-												<div className="flex items-center space-x-2">
-													<RadioGroupItem value="webm" id="webm" />
-													<Label htmlFor="webm">
-														WebM (VP9) - Smaller file size
-													</Label>
-												</div>
-											</RadioGroup>
-										</SectionContent>
-									</Section>
-
-									<Section collapsible defaultOpen={false}>
-										<SectionHeader>
-											<SectionTitle>Quality</SectionTitle>
-										</SectionHeader>
-										<SectionContent>
-											<RadioGroup
-												value={quality}
-												onValueChange={(value) => {
-													if (isExportQuality(value)) {
-														setQuality(value);
-													}
-												}}
-											>
-												<div className="flex items-center space-x-2">
-													<RadioGroupItem value="low" id="low" />
-													<Label htmlFor="low">Low - Smallest file size</Label>
-												</div>
-												<div className="flex items-center space-x-2">
-													<RadioGroupItem value="medium" id="medium" />
-													<Label htmlFor="medium">Medium - Balanced</Label>
-												</div>
-												<div className="flex items-center space-x-2">
-													<RadioGroupItem value="high" id="high" />
-													<Label htmlFor="high">High - Recommended</Label>
-												</div>
-												<div className="flex items-center space-x-2">
-													<RadioGroupItem value="very_high" id="very_high" />
-													<Label htmlFor="very_high">
-														Very high - Largest file size
-													</Label>
-												</div>
-											</RadioGroup>
-										</SectionContent>
-									</Section>
-
-									<Section collapsible defaultOpen={false}>
-										<SectionHeader>
-											<SectionTitle>Audio</SectionTitle>
-										</SectionHeader>
-										<SectionContent>
-											<div className="flex items-center space-x-2">
-												<Checkbox
-													id="include-audio"
-													checked={shouldIncludeAudio}
-													onCheckedChange={(checked) =>
-														setShouldIncludeAudio(!!checked)
-													}
-												/>
-												<Label htmlFor="include-audio">
-													Include audio in export
-												</Label>
-											</div>
-										</SectionContent>
-									</Section>
-								</div>
+								<ExportSettingsForm
+									settings={settings}
+									onChange={setSettings}
+									projectSize={activeProject.settings.canvasSize}
+									projectFps={activeProject.settings.fps}
+								/>
 
 								<div className="flex flex-col gap-2 p-3 pt-0">
 									{isNativeExport && (
