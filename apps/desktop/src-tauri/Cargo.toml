@@ -1,6 +1,6 @@
 [package]
 name = "rcut"
-version = "0.1.1"
+version = "0.1.2"
 description = "RCut video editor"
 edition = "2021"
 
