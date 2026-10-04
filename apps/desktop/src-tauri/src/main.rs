@@ -9,10 +9,13 @@ use tauri::Manager;
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .manage(export_files::ExportStreams::default())
         .invoke_handler(tauri::generate_handler![
             linked_files::open_linked_file,
-            export_files::save_export_to_folder,
-            export_files::save_export_as,
+            export_files::export_stream_open,
+            export_files::export_stream_write,
+            export_files::export_stream_finish,
+            export_files::export_stream_abort,
             export_files::default_export_folder,
             export_files::reveal_in_folder,
         ])

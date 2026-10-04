@@ -2,7 +2,7 @@
 
 use std::ffi::OsStr;
 use std::fs::{File, OpenOptions};
-use std::io::{ErrorKind, Write};
+use std::io::{ErrorKind, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 
 use percent_encoding::percent_decode_str;
@@ -85,28 +85,149 @@ fn validate_reveal_path(path: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Saves the raw export bytes into a folder without overwriting existing files.
-#[tauri::command]
-pub async fn save_export_to_folder(request: Request<'_>) -> Result<String, String> {
-    let folder = header(&request, "x-rcut-folder")?;
-    let file_name = header(&request, "x-rcut-file-name")?;
-    validate_file_name(&file_name)?;
-    let bytes = raw_body(&request)?;
-    let (path, mut file) = create_unique_export_file(Path::new(&folder), &file_name)?;
-    file.write_all(bytes)
-        .map_err(|error| format!("Could not save {}: {error}", path.display()))?;
-    Ok(path.to_string_lossy().into_owned())
+/// Where a streamed export ends up.
+pub enum Destination {
+    /// A folder plus a file name; the final name is made unique.
+    Folder { dir: PathBuf, file_name: String },
+    /// The exact path chosen in the Save dialog.
+    Path(PathBuf),
 }
 
-/// Saves the raw export bytes to an exact path chosen in the Save dialog.
+/// An export being streamed into `<destination>.<id>.part`.
+pub struct OpenExport {
+    file: File,
+    pub part_path: PathBuf,
+    destination: Destination,
+}
+
+impl OpenExport {
+    pub fn create(destination: Destination) -> Result<Self, String> {
+        let (dir, base) = match &destination {
+            Destination::Folder { dir, file_name } => {
+                validate_file_name(file_name)?;
+                validate_export_extension(Path::new(file_name))?;
+                (dir.clone(), file_name.clone())
+            }
+            Destination::Path(path) => {
+                validate_export_extension(path)?;
+                let dir = path.parent().map(Path::to_path_buf).unwrap_or_default();
+                let base = path.file_name().and_then(OsStr::to_str).unwrap_or("export.mp4").to_string();
+                (dir, base)
+            }
+        };
+        for n in 0u32.. {
+            let part_path = dir.join(format!("{base}.{n}.part"));
+            match OpenOptions::new().write(true).create_new(true).open(&part_path) {
+                Ok(file) => return Ok(Self { file, part_path, destination }),
+                Err(error) if error.kind() == ErrorKind::AlreadyExists => continue,
+                Err(error) => return Err(format!("Could not create {}: {error}", part_path.display())),
+            }
+        }
+        unreachable!("part file candidates never run out")
+    }
+
+    pub fn write_at(&mut self, position: u64, bytes: &[u8]) -> Result<(), String> {
+        self.file
+            .seek(SeekFrom::Start(position))
+            .and_then(|_| self.file.write_all(bytes))
+            .map_err(|error| format!("Could not write {}: {error}", self.part_path.display()))
+    }
+
+    /// Flushes and moves the part file to its final name.
+    pub fn finish(self) -> Result<PathBuf, String> {
+        let Self { file, part_path, destination } = self;
+        file.sync_all()
+            .map_err(|error| format!("Could not save {}: {error}", part_path.display()))?;
+        drop(file);
+        let final_path = match destination {
+            Destination::Folder { dir, file_name } => {
+                // Reserve a unique name atomically, then replace the empty placeholder.
+                let (path, placeholder) = create_unique_export_file(&dir, &file_name)?;
+                drop(placeholder);
+                path
+            }
+            Destination::Path(path) => path,
+        };
+        std::fs::rename(&part_path, &final_path).map_err(|error| {
+            let _ = std::fs::remove_file(&part_path);
+            format!("Could not save {}: {error}", final_path.display())
+        })?;
+        Ok(final_path)
+    }
+
+    pub fn abort(self) {
+        let Self { file, part_path, .. } = self;
+        drop(file);
+        let _ = std::fs::remove_file(&part_path);
+    }
+}
+
+/// Exports currently being streamed, by id.
+#[derive(Default)]
+pub struct ExportStreams {
+    next_id: std::sync::atomic::AtomicU32,
+    open: std::sync::Mutex<std::collections::HashMap<u32, OpenExport>>,
+}
+
 #[tauri::command]
-pub async fn save_export_as(request: Request<'_>) -> Result<String, String> {
-    let path = PathBuf::from(header(&request, "x-rcut-path")?);
-    validate_export_extension(&path)?;
+pub async fn export_stream_open(
+    request: Request<'_>,
+    streams: tauri::State<'_, ExportStreams>,
+) -> Result<u32, String> {
+    let destination = match header(&request, "x-rcut-path") {
+        Ok(path) => Destination::Path(PathBuf::from(path)),
+        Err(_) => Destination::Folder {
+            dir: PathBuf::from(header(&request, "x-rcut-folder")?),
+            file_name: header(&request, "x-rcut-file-name")?,
+        },
+    };
+    let open = OpenExport::create(destination)?;
+    let id = streams.next_id.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    streams.open.lock().map_err(|error| error.to_string())?.insert(id, open);
+    Ok(id)
+}
+
+#[tauri::command]
+pub async fn export_stream_write(
+    request: Request<'_>,
+    streams: tauri::State<'_, ExportStreams>,
+) -> Result<(), String> {
+    let id: u32 = header(&request, "x-rcut-stream-id")?
+        .parse()
+        .map_err(|_| "invalid x-rcut-stream-id".to_string())?;
+    let position: u64 = header(&request, "x-rcut-position")?
+        .parse()
+        .map_err(|_| "invalid x-rcut-position".to_string())?;
     let bytes = raw_body(&request)?;
-    std::fs::write(&path, bytes)
-        .map_err(|error| format!("Could not save {}: {error}", path.display()))?;
-    Ok(path.to_string_lossy().into_owned())
+    let mut open = streams.open.lock().map_err(|error| error.to_string())?;
+    let export = open.get_mut(&id).ok_or_else(|| format!("unknown export stream {id}"))?;
+    export.write_at(position, bytes)
+}
+
+#[tauri::command]
+pub async fn export_stream_finish(
+    id: u32,
+    streams: tauri::State<'_, ExportStreams>,
+) -> Result<String, String> {
+    let export = streams
+        .open
+        .lock()
+        .map_err(|error| error.to_string())?
+        .remove(&id)
+        .ok_or_else(|| format!("unknown export stream {id}"))?;
+    export.finish().map(|path| path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub async fn export_stream_abort(
+    id: u32,
+    streams: tauri::State<'_, ExportStreams>,
+) -> Result<(), String> {
+    let export = streams.open.lock().map_err(|error| error.to_string())?.remove(&id);
+    if let Some(export) = export {
+        export.abort();
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -154,7 +275,7 @@ fn raw_body<'a>(request: &'a Request<'_>) -> Result<&'a [u8], String> {
 mod tests {
     use super::{
         create_unique_export_file, validate_export_extension, validate_file_name,
-        validate_reveal_path,
+        validate_reveal_path, Destination, OpenExport,
     };
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -267,5 +388,52 @@ mod tests {
         assert!(validate_reveal_path(file.to_str().unwrap()).is_ok());
         assert!(validate_reveal_path(dir.join("missing.mp4").to_str().unwrap()).is_err());
         assert!(validate_reveal_path("C:\\a\" /select,\"C:\\b").is_err());
+    }
+
+    #[test]
+    fn part_file_is_created_next_to_the_destination_and_finished_with_a_unique_name() {
+        let dir = temp_dir("stream-folder");
+        fs::write(dir.join("clip.mp4"), b"old").unwrap();
+        let destination = Destination::Folder { dir: dir.clone(), file_name: "clip.mp4".into() };
+        let mut open = OpenExport::create(destination).unwrap();
+        assert!(open.part_path.starts_with(&dir));
+        assert!(open.part_path.to_string_lossy().ends_with(".part"));
+        open.write_at(0, b"hello").unwrap();
+        open.write_at(5, b" world").unwrap();
+        open.write_at(0, b"J").unwrap();
+        let path = open.finish().unwrap();
+        assert_eq!(path, dir.join("clip (2).mp4"));
+        assert_eq!(fs::read(&path).unwrap(), b"Jello world");
+        assert_eq!(fs::read(dir.join("clip.mp4")).unwrap(), b"old");
+        assert!(fs::read_dir(&dir).unwrap().all(|entry| !entry.unwrap().path().to_string_lossy().ends_with(".part")));
+    }
+
+    #[test]
+    fn exact_path_destination_replaces_the_chosen_file() {
+        let dir = temp_dir("stream-path");
+        let target = dir.join("chosen.mp4");
+        fs::write(&target, b"old").unwrap();
+        let mut open = OpenExport::create(Destination::Path(target.clone())).unwrap();
+        open.write_at(0, b"new").unwrap();
+        assert_eq!(open.finish().unwrap(), target);
+        assert_eq!(fs::read(&target).unwrap(), b"new");
+    }
+
+    #[test]
+    fn abort_deletes_the_part_file() {
+        let dir = temp_dir("stream-abort");
+        let mut open = OpenExport::create(Destination::Folder { dir: dir.clone(), file_name: "clip.mp4".into() }).unwrap();
+        open.write_at(0, b"partial").unwrap();
+        let part = open.part_path.clone();
+        open.abort();
+        assert!(!part.exists());
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn destinations_are_validated() {
+        let dir = temp_dir("stream-validate");
+        assert!(OpenExport::create(Destination::Folder { dir: dir.clone(), file_name: "../x.mp4".into() }).is_err());
+        assert!(OpenExport::create(Destination::Path(dir.join("x.exe"))).is_err());
     }
 }
