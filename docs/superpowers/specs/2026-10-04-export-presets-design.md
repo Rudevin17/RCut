@@ -116,6 +116,7 @@ Every built-in preset uses `mp4`, `variable`, and audio on at 192 kbps.
 - **Encoder stall guard.** WebView2's software encoder can stop responding without an error.
   - Each frame's render and encode step races a 20 s stall timer and the cancel signal.
   - If the timer wins, the export fails with "The video encoder stopped responding while exporting (frame N). Try exporting again, or choose MP4." and the user can retry. A stall after frames were added is never retried automatically.
+  - The final flush (`finalize`) has the same guard. If it stalls, the export fails with "The video encoder stopped responding while finishing the export. Try exporting again, or choose MP4."
   - Cancel always ends the export, even while the encoder is stuck. Cancelling the output itself is capped at 2 s.
 - Every other failure path (save errors, the Downloads fallback, cancellation) is unchanged.
 

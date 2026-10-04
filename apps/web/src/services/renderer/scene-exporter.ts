@@ -75,14 +75,10 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 	private audioBuffer?: AudioBuffer;
 
 	private isCancelled = false;
-	private cancelSignal: Promise<void>;
-	private resolveCancel!: () => void;
+	private cancelController = new AbortController();
 
 	constructor({ renderWidth, renderHeight, encode, audioBuffer }: ExportParams) {
 		super();
-		this.cancelSignal = new Promise<void>((resolve) => {
-			this.resolveCancel = resolve;
-		});
 		this.renderer = new CanvasRenderer({
 			width: renderWidth,
 			height: renderHeight,
@@ -96,7 +92,7 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 
 	cancel(): void {
 		this.isCancelled = true;
-		this.resolveCancel();
+		this.cancelController.abort();
 	}
 
 	/** Awaits `promise`, but gives up when the user cancels (ExportCancelled) or it takes longer than STALL_TIMEOUT_MS (an Error with `stallMessage`). */
@@ -109,17 +105,21 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 	}): Promise<T> {
 		// If the race is lost, the abandoned promise may still reject later; that must not surface.
 		promise.catch(() => {});
+		const { signal } = this.cancelController;
+		if (signal.aborted) throw new ExportCancelled();
+
 		let timer: ReturnType<typeof setTimeout> | undefined;
-		const stalled = new Promise<never>((_, reject) => {
+		let onAbort: (() => void) | undefined;
+		const interrupted = new Promise<never>((_, reject) => {
 			timer = setTimeout(() => reject(new Error(stallMessage)), STALL_TIMEOUT_MS);
-		});
-		const cancelled = this.cancelSignal.then((): never => {
-			throw new ExportCancelled();
+			onAbort = () => reject(new ExportCancelled());
+			signal.addEventListener("abort", onAbort, { once: true });
 		});
 		try {
-			return await Promise.race([promise, stalled, cancelled]);
+			return await Promise.race([promise, interrupted]);
 		} finally {
 			clearTimeout(timer);
+			if (onAbort) signal.removeEventListener("abort", onAbort);
 		}
 	}
 
@@ -158,6 +158,11 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 		try {
 			buffer = await this.encodeVideo({ ...params, hardwareAcceleration: picked });
 		} catch (error) {
+			// A cancel that arrives during a failed attempt still ends as a cancel.
+			if (this.isCancelled) {
+				this.emit("cancelled");
+				return null;
+			}
 			if (!(error instanceof EncodeError)) throw error;
 			// The pre-check can't see every rejected config (e.g. framerate), so retry once with the browser's choice.
 			const canRetry =
@@ -171,6 +176,10 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 					hardwareAcceleration: "no-preference",
 				});
 			} catch (retryError) {
+				if (this.isCancelled) {
+					this.emit("cancelled");
+					return null;
+				}
 				throw retryError instanceof EncodeError ? retryError.cause : retryError;
 			}
 		}
@@ -281,10 +290,11 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 				return null;
 			}
 
-			// close() flushes the encoder, so it can hang like add() does.
+			// close() is synchronous; finalize() is what awaits the encoder flush, so it can hang like add() does.
+			// Once finalize has started, output.cancel() can't release a stuck encoder (a mediabunny limitation).
 			await this.guard({
 				promise: (async () => {
-					await videoSource.close();
+					videoSource.close();
 					await output.finalize();
 				})(),
 				stallMessage:
