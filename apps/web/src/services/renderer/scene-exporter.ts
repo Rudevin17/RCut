@@ -47,6 +47,18 @@ export type SceneExporterEvents = {
 	cancelled: [];
 };
 
+/** An encode attempt that failed, with how many video frames it had added and the original error. */
+class EncodeError extends Error {
+	framesEncoded: number;
+	declare cause: unknown;
+
+	constructor({ cause, framesEncoded }: { cause: unknown; framesEncoded: number }) {
+		super(cause instanceof Error ? cause.message : String(cause));
+		this.cause = cause;
+		this.framesEncoded = framesEncoded;
+	}
+}
+
 export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 	private renderer: CanvasRenderer;
 	private renderWidth: number;
@@ -78,93 +90,44 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 	}: {
 		rootNode: RootNode;
 	}): Promise<ArrayBuffer | null> {
-		const { format, fps, bitrateMode, includeAudio, audioBitrate } = this.encode;
-		const fpsFloat = frameRateToFloat(fps);
-		const ticksPerFrame = Math.round(
-			(TICKS_PER_SECOND * fps.denominator) / fps.numerator,
-		);
-		const frameCount = Math.floor(rootNode.duration / ticksPerFrame);
-
+		const { format } = this.encode;
 		const codec: VideoCodec = format === "webm" ? "vp9" : "avc";
 		const videoBitrate =
 			typeof this.encode.videoBitrate === "number"
 				? this.encode.videoBitrate
 				: qualityMap[this.encode.videoBitrate];
-		const hardwareAcceleration = await this.pickHardwareAcceleration({
+		const picked = await this.pickHardwareAcceleration({
 			codec,
 			bitrate: videoBitrate,
 		});
 		const encodeCanvas = this.createEncodeCanvas();
+		const params = { rootNode, encodeCanvas, codec, videoBitrate };
 
-		const output = new Output({
-			format: format === "webm" ? new WebMOutputFormat() : new Mp4OutputFormat(),
-			target: new BufferTarget(),
-		});
-
-		const videoSource = new CanvasSource(encodeCanvas.canvas, {
-			codec,
-			bitrate: videoBitrate,
-			bitrateMode,
-			hardwareAcceleration,
-		});
-
-		output.addVideoTrack(videoSource, { frameRate: fpsFloat });
-
-		let audioSource: AudioBufferSource | null = null;
-		if (includeAudio && this.audioBuffer) {
-			let audioCodec: "aac" | "opus" = format === "webm" ? "opus" : "aac";
-
-			if (audioCodec === "aac" && typeof AudioEncoder !== "undefined") {
-				const { supported } = await AudioEncoder.isConfigSupported({
-					codec: "mp4a.40.2",
-					sampleRate: this.audioBuffer.sampleRate,
-					numberOfChannels: this.audioBuffer.numberOfChannels,
-					bitrate: audioBitrate,
+		let buffer: ArrayBuffer | null;
+		try {
+			buffer = await this.encodeVideo({ ...params, hardwareAcceleration: picked });
+		} catch (error) {
+			if (!(error instanceof EncodeError)) throw error;
+			// The pre-check can't see every rejected config (e.g. framerate), so retry once with the browser's choice.
+			const canRetry =
+				picked !== "no-preference" &&
+				error.framesEncoded === 0 &&
+				!this.isCancelled;
+			if (!canRetry) throw error.cause;
+			try {
+				buffer = await this.encodeVideo({
+					...params,
+					hardwareAcceleration: "no-preference",
 				});
-				if (!supported) audioCodec = "opus";
+			} catch (retryError) {
+				throw retryError instanceof EncodeError ? retryError.cause : retryError;
 			}
-
-			audioSource = new AudioBufferSource({
-				codec: audioCodec,
-				bitrate: audioBitrate,
-			});
-			output.addAudioTrack(audioSource);
 		}
 
-		await output.start();
-
-		if (audioSource && this.audioBuffer) {
-			await audioSource.add(this.audioBuffer);
-			audioSource.close();
-		}
-
-		for (let i = 0; i < frameCount; i++) {
-			if (this.isCancelled) {
-				await output.cancel();
-				this.emit("cancelled");
-				return null;
-			}
-
-			const timeTicks = i * ticksPerFrame;
-			const timeSeconds = mediaTimeToSeconds({ time: timeTicks });
-			await this.renderer.render({ node: rootNode, time: timeTicks });
-			encodeCanvas.draw();
-			await videoSource.add(timeSeconds, 1 / fpsFloat);
-
-			this.emit("progress", i / frameCount);
-		}
-
-		if (this.isCancelled) {
-			await output.cancel();
+		if (this.isCancelled && !buffer) {
 			this.emit("cancelled");
 			return null;
 		}
-
-		videoSource.close();
-		await output.finalize();
-		this.emit("progress", 1);
-
-		const buffer = output.target.buffer;
 		if (!buffer) {
 			this.emit("error", new Error("Failed to export video"));
 			return null;
@@ -172,6 +135,103 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 
 		this.emit("complete", buffer);
 		return buffer;
+	}
+
+	/** One full encode attempt. Returns null when cancelled; throws an EncodeError (after cancelling the output) on failure. */
+	private async encodeVideo({
+		rootNode,
+		hardwareAcceleration,
+		encodeCanvas,
+		codec,
+		videoBitrate,
+	}: {
+		rootNode: RootNode;
+		hardwareAcceleration: HardwareAcceleration;
+		encodeCanvas: { canvas: HTMLCanvasElement | OffscreenCanvas; draw: () => void };
+		codec: VideoCodec;
+		videoBitrate: number | Quality;
+	}): Promise<ArrayBuffer | null> {
+		const { format, fps, bitrateMode, includeAudio, audioBitrate } = this.encode;
+		const fpsFloat = frameRateToFloat(fps);
+		const ticksPerFrame = Math.round(
+			(TICKS_PER_SECOND * fps.denominator) / fps.numerator,
+		);
+		const frameCount = Math.floor(rootNode.duration / ticksPerFrame);
+		let framesEncoded = 0;
+
+		const output = new Output({
+			format: format === "webm" ? new WebMOutputFormat() : new Mp4OutputFormat(),
+			target: new BufferTarget(),
+		});
+
+		try {
+			const videoSource = new CanvasSource(encodeCanvas.canvas, {
+				codec,
+				bitrate: videoBitrate,
+				bitrateMode,
+				hardwareAcceleration,
+			});
+
+			output.addVideoTrack(videoSource, { frameRate: fpsFloat });
+
+			let audioSource: AudioBufferSource | null = null;
+			if (includeAudio && this.audioBuffer) {
+				let audioCodec: "aac" | "opus" = format === "webm" ? "opus" : "aac";
+
+				if (audioCodec === "aac" && typeof AudioEncoder !== "undefined") {
+					const { supported } = await AudioEncoder.isConfigSupported({
+						codec: "mp4a.40.2",
+						sampleRate: this.audioBuffer.sampleRate,
+						numberOfChannels: this.audioBuffer.numberOfChannels,
+						bitrate: audioBitrate,
+					});
+					if (!supported) audioCodec = "opus";
+				}
+
+				audioSource = new AudioBufferSource({
+					codec: audioCodec,
+					bitrate: audioBitrate,
+				});
+				output.addAudioTrack(audioSource);
+			}
+
+			await output.start();
+
+			if (audioSource && this.audioBuffer) {
+				await audioSource.add(this.audioBuffer);
+				audioSource.close();
+			}
+
+			for (let i = 0; i < frameCount; i++) {
+				if (this.isCancelled) {
+					await output.cancel();
+					return null;
+				}
+
+				const timeTicks = i * ticksPerFrame;
+				const timeSeconds = mediaTimeToSeconds({ time: timeTicks });
+				await this.renderer.render({ node: rootNode, time: timeTicks });
+				encodeCanvas.draw();
+				await videoSource.add(timeSeconds, 1 / fpsFloat);
+				framesEncoded++;
+
+				this.emit("progress", i / frameCount);
+			}
+
+			if (this.isCancelled) {
+				await output.cancel();
+				return null;
+			}
+
+			videoSource.close();
+			await output.finalize();
+			this.emit("progress", 1);
+
+			return output.target.buffer;
+		} catch (error) {
+			await output.cancel().catch(() => {});
+			throw new EncodeError({ cause: error, framesEncoded });
+		}
 	}
 
 	/** Prefers the requested acceleration, falls back to the browser's choice, and fails clearly if neither can encode. */
