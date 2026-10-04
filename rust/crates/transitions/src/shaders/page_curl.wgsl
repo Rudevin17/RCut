@@ -83,7 +83,7 @@ fn curl_see_through_with_shadow(
         shadow = shadow * curl_amount;
     }
     let shadow_color = curl_see_through(yc, p, rotation, rrotation);
-    return vec4f(shadow_color.rgb - shadow * shadow_color.a, shadow_color.a);
+    return vec4f(shadow_color.rgb - shadow, shadow_color.a);
 }
 
 fn curl_backside(yc: f32, point: vec3f) -> vec4f {
