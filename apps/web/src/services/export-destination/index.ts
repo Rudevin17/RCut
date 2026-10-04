@@ -40,35 +40,6 @@ export async function pickExportFile({
 	});
 }
 
-export async function saveExportToFolder({
-	buffer,
-	folder,
-	fileName,
-}: {
-	buffer: ArrayBuffer;
-	folder: string;
-	fileName: string;
-}): Promise<string> {
-	return invoke<string>("save_export_to_folder", new Uint8Array(buffer), {
-		headers: {
-			"x-rcut-folder": encodeURIComponent(folder),
-			"x-rcut-file-name": encodeURIComponent(fileName),
-		},
-	});
-}
-
-export async function saveExportAs({
-	buffer,
-	path,
-}: {
-	buffer: ArrayBuffer;
-	path: string;
-}): Promise<string> {
-	return invoke<string>("save_export_as", new Uint8Array(buffer), {
-		headers: { "x-rcut-path": encodeURIComponent(path) },
-	});
-}
-
 export async function revealInFolder({ path }: { path: string }): Promise<void> {
 	await invoke("reveal_in_folder", { path });
 }

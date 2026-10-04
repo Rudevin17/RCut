@@ -9,6 +9,7 @@ import type {
 } from "@/project/types";
 import type { ExportResult, ExportState } from "@/export";
 import type { ExportSettings } from "@/export/settings";
+import type { ExportSink } from "@/export/sink";
 import { storageService } from "@/services/storage/service";
 import { toast } from "sonner";
 import { generateUUID } from "@/utils/id";
@@ -211,13 +212,20 @@ export class ProjectManager {
 		}
 	}
 
-	async export({ settings }: { settings: ExportSettings }): Promise<ExportResult> {
+	async export({
+		settings,
+		sink,
+	}: {
+		settings: ExportSettings;
+		sink: ExportSink;
+	}): Promise<ExportResult> {
 		this.exportCancelRequested = false;
 		this.exportState = { isExporting: true, progress: 0, result: null };
 		this.notify();
 
 		const result = await this.editor.renderer.exportProject({
 			settings,
+			sink,
 			onProgress: ({ progress }) => {
 				this.exportState = { ...this.exportState, progress };
 				this.notify();

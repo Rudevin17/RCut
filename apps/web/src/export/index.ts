@@ -1,3 +1,5 @@
+import type { ExportOutput } from "./sink";
+
 export const EXPORT_MIME_TYPE = "video/mp4";
 export const EXPORT_FILE_EXTENSION = ".mp4";
 
@@ -12,7 +14,7 @@ export type ExportQuality = (typeof EXPORT_QUALITY_VALUES)[number];
 
 export interface ExportResult {
 	success: boolean;
-	buffer?: ArrayBuffer;
+	output?: ExportOutput;
 	error?: string;
 	cancelled?: boolean;
 }

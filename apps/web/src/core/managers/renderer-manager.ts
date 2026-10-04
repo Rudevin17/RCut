@@ -2,6 +2,7 @@ import type { EditorCore } from "@/core";
 import type { RootNode } from "@/services/renderer/nodes/root-node";
 import type { ExportResult } from "@/export";
 import type { ExportSettings } from "@/export/settings";
+import type { ExportSink } from "@/export/sink";
 import { resolveEncodeParams } from "@/export/resolve";
 import { CanvasRenderer } from "@/services/renderer/canvas-renderer";
 import { SceneExporter } from "@/services/renderer/scene-exporter";
@@ -143,10 +144,12 @@ export class RendererManager {
 
 	async exportProject({
 		settings,
+		sink,
 		onProgress,
 		onCancel,
 	}: {
 		settings: ExportSettings;
+		sink: ExportSink;
 		onProgress?: ({ progress }: { progress: number }) => void;
 		onCancel?: () => boolean;
 	}): Promise<ExportResult> {
@@ -207,20 +210,20 @@ export class RendererManager {
 			const cancelInterval = setInterval(checkCancel, 100);
 
 			try {
-				const buffer = await exporter.export({ rootNode: scene });
+				const output = await exporter.export({ rootNode: scene, sink });
 				clearInterval(cancelInterval);
 
 				if (cancelled) {
 					return { success: false, cancelled: true };
 				}
 
-				if (!buffer) {
-					return { success: false, error: "Export failed to produce buffer" };
+				if (!output) {
+					return { success: false, error: "Export produced no output" };
 				}
 
 				return {
 					success: true,
-					buffer,
+					output,
 				};
 			} finally {
 				clearInterval(cancelInterval);

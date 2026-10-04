@@ -3,7 +3,6 @@ import EventEmitter from "eventemitter3";
 import {
 	Output,
 	Mp4OutputFormat,
-	BufferTarget,
 	CanvasSource,
 	AudioBufferSource,
 	canEncodeVideo,
@@ -18,6 +17,7 @@ import { TICKS_PER_SECOND } from "@/wasm";
 import { frameRateToFloat } from "@/fps/utils";
 import type { RootNode } from "./nodes/root-node";
 import type { ExportQuality } from "@/export";
+import type { ExportOutput, ExportSink, ExportSinkAttempt } from "@/export/sink";
 import { formatFrameRate, type EncodeParams } from "@/export/resolve";
 import { CanvasRenderer } from "./canvas-renderer";
 import type { TimelineAudioStream } from "@/media/audio-export/timeline-audio-stream";
@@ -46,7 +46,7 @@ const qualityMap: Record<ExportQuality, Quality> = {
 
 export type SceneExporterEvents = {
 	progress: [progress: number];
-	complete: [buffer: ArrayBuffer];
+	complete: [output: ExportOutput];
 	error: [error: Error];
 	cancelled: [];
 };
@@ -122,14 +122,24 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 		}
 	}
 
-	/** Cancels the output without waiting forever on a stuck encoder. */
-	private async cancelOutput({ output }: { output: Output }): Promise<void> {
+	/**
+	 * Cancels the output, then aborts the attempt so its partial file is removed.
+	 * Both share one timeout, so a stuck encoder never blocks cleanup: abort is always started, even when cancel hangs.
+	 */
+	private async cancelOutput({
+		output,
+		attempt,
+	}: {
+		output: Output;
+		attempt: ExportSinkAttempt;
+	}): Promise<void> {
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		const timeout = new Promise<void>((resolve) => {
 			timer = setTimeout(resolve, OUTPUT_CANCEL_TIMEOUT_MS);
 		});
 		try {
 			await Promise.race([output.cancel().catch(() => {}), timeout]);
+			await Promise.race([attempt.abort(), timeout]);
 		} finally {
 			clearTimeout(timer);
 		}
@@ -137,9 +147,11 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 
 	async export({
 		rootNode,
+		sink,
 	}: {
 		rootNode: RootNode;
-	}): Promise<ArrayBuffer | null> {
+		sink: ExportSink;
+	}): Promise<ExportOutput | null> {
 		const videoBitrate =
 			typeof this.encode.videoBitrate === "number"
 				? this.encode.videoBitrate
@@ -148,11 +160,11 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 			bitrate: videoBitrate,
 		});
 		const encodeCanvas = this.createEncodeCanvas();
-		const params = { rootNode, encodeCanvas, videoBitrate };
+		const params = { rootNode, sink, encodeCanvas, videoBitrate };
 
-		let buffer: ArrayBuffer | null;
+		let output: ExportOutput | null;
 		try {
-			buffer = await this.encodeVideo({ ...params, hardwareAcceleration: picked });
+			output = await this.encodeVideo({ ...params, hardwareAcceleration: picked });
 		} catch (error) {
 			// A cancel that arrives during a failed attempt still ends as a cancel.
 			if (this.isCancelled) {
@@ -168,7 +180,7 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 			if (!canRetry) throw error.cause;
 			this.audio?.reset();
 			try {
-				buffer = await this.encodeVideo({
+				output = await this.encodeVideo({
 					...params,
 					hardwareAcceleration: "no-preference",
 				});
@@ -181,31 +193,33 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 			}
 		}
 
-		if (this.isCancelled && !buffer) {
+		if (this.isCancelled && !output) {
 			this.emit("cancelled");
 			return null;
 		}
-		if (!buffer) {
+		if (!output) {
 			this.emit("error", new Error("Failed to export video"));
 			return null;
 		}
 
-		this.emit("complete", buffer);
-		return buffer;
+		this.emit("complete", output);
+		return output;
 	}
 
-	/** One full encode attempt. Returns null when cancelled; throws an EncodeError (after cancelling the output) on failure. */
+	/** One full encode attempt into a fresh sink destination. Returns null when cancelled; throws an EncodeError (after cancelling the output and aborting the destination) on failure. */
 	private async encodeVideo({
 		rootNode,
+		sink,
 		hardwareAcceleration,
 		encodeCanvas,
 		videoBitrate,
 	}: {
 		rootNode: RootNode;
+		sink: ExportSink;
 		hardwareAcceleration: HardwareAcceleration;
 		encodeCanvas: { canvas: HTMLCanvasElement | OffscreenCanvas; draw: () => void };
 		videoBitrate: number | Quality;
-	}): Promise<ArrayBuffer | null> {
+	}): Promise<ExportOutput | null> {
 		const { fps, bitrateMode, includeAudio, audioBitrate } = this.encode;
 		const fpsFloat = frameRateToFloat(fps);
 		const ticksPerFrame = Math.round(
@@ -214,9 +228,10 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 		const frameCount = Math.floor(rootNode.duration / ticksPerFrame);
 		let framesEncoded = 0;
 
+		const attempt = await sink.open();
 		const output = new Output({
-			format: new Mp4OutputFormat(),
-			target: new BufferTarget(),
+			format: new Mp4OutputFormat({ fastStart: attempt.fastStart }),
+			target: attempt.target,
 		});
 
 		try {
@@ -274,7 +289,7 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 
 			for (let i = 0; i < frameCount; i++) {
 				if (this.isCancelled) {
-					await this.cancelOutput({ output });
+					await this.cancelOutput({ output, attempt });
 					return null;
 				}
 
@@ -297,7 +312,7 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 			}
 
 			if (this.isCancelled) {
-				await this.cancelOutput({ output });
+				await this.cancelOutput({ output, attempt });
 				return null;
 			}
 
@@ -316,9 +331,12 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 			});
 			this.emit("progress", 1);
 
-			return output.target.buffer;
+			return await this.guard({
+				promise: attempt.commit(),
+				stallMessage: "Saving the export stopped responding. Try exporting again.",
+			});
 		} catch (error) {
-			await this.cancelOutput({ output });
+			await this.cancelOutput({ output, attempt });
 			if (error instanceof ExportCancelled) return null;
 			throw new EncodeError({ cause: error, framesEncoded });
 		}

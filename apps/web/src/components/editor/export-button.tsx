@@ -23,64 +23,47 @@ import { useEditor } from "@/editor/use-editor";
 import type { ExportSettings } from "@/export/settings";
 import { getExportFileName } from "@/export/export-file-name";
 import { useExportSettingsStore } from "@/export/export-settings-store";
+import type { ExportOutput, ExportSink } from "@/export/sink";
 import {
 	getDefaultExportFolder,
 	isNativeExportAvailable,
 	pickExportFile,
 	pickExportFolder,
 	revealInFolder,
-	saveExportAs,
-	saveExportToFolder,
 } from "@/services/export-destination";
+import {
+	createBufferSink,
+	createDiskSink,
+} from "@/services/export-destination/sinks";
 
-type ExportDestination =
-	| { kind: "folder"; folder: string }
-	| { kind: "file"; path: string }
-	| { kind: "download" };
-
-async function saveExport({
-	buffer,
-	destination,
+/** Hands a finished export to the user: a saved file gets a toast, an in-memory one a browser download. */
+function deliverExport({
+	output,
 	fileName,
-	mimeType,
 }: {
-	buffer: ArrayBuffer;
-	destination: ExportDestination;
+	output: ExportOutput;
 	fileName: string;
-	mimeType: string;
-}): Promise<void> {
-	if (destination.kind === "download") {
-		downloadBuffer({ buffer, filename: fileName, mimeType });
+}): void {
+	if (output.kind === "buffer") {
+		downloadBuffer({
+			buffer: output.buffer,
+			filename: fileName,
+			mimeType: EXPORT_MIME_TYPE,
+		});
 		return;
 	}
 
-	try {
-		const path =
-			destination.kind === "folder"
-				? await saveExportToFolder({
-						buffer,
-						folder: destination.folder,
-						fileName,
-					})
-				: await saveExportAs({ buffer, path: destination.path });
-
-		toast.success(`Exported to ${path}`, {
-			action: {
-				label: "Show in folder",
-				onClick: () => {
-					revealInFolder({ path }).catch((error) =>
-						console.error("Failed to show export in folder:", error),
-					);
-				},
+	const { path } = output;
+	toast.success(`Exported to ${path}`, {
+		action: {
+			label: "Show in folder",
+			onClick: () => {
+				revealInFolder({ path }).catch((error) =>
+					console.error("Failed to show export in folder:", error),
+				);
 			},
-		});
-	} catch (error) {
-		// Keep the rendered export: hand it to the browser download instead.
-		downloadBuffer({ buffer, filename: fileName, mimeType });
-		toast.error("Couldn't save the export, so it went to Downloads instead", {
-			description: errorMessage({ error }),
-		});
-	}
+		},
+	});
 }
 
 function errorMessage({ error }: { error: unknown }): string {
@@ -187,7 +170,7 @@ function ExportPopover({
 			extension: EXPORT_FILE_EXTENSION,
 		});
 
-		let destination: ExportDestination = { kind: "download" };
+		let sink: ExportSink = createBufferSink();
 		if (isNativeExport) {
 			if (!targetFolder) {
 				toast.error("Choose an export folder first");
@@ -211,27 +194,24 @@ function ExportPopover({
 					toast.error(`The file name must end in ${EXPORT_FILE_EXTENSION}`);
 					return;
 				}
-				destination = { kind: "file", path };
+				sink = createDiskSink({ destination: { kind: "file", path } });
 			} else {
-				destination = { kind: "folder", folder: targetFolder };
+				sink = createDiskSink({
+					destination: { kind: "folder", folder: targetFolder, fileName },
+				});
 			}
 		}
 
-		const result = await editor.project.export({ settings });
+		const result = await editor.project.export({ settings, sink });
 
 		if (result.cancelled) {
 			editor.project.clearExportState();
 			return;
 		}
 
-		if (result.success && result.buffer) {
+		if (result.success && result.output) {
 			setLastSettings({ settings });
-			await saveExport({
-				buffer: result.buffer,
-				destination,
-				fileName,
-				mimeType: EXPORT_MIME_TYPE,
-			});
+			deliverExport({ output: result.output, fileName });
 
 			editor.project.clearExportState();
 			onOpenChange(false);
