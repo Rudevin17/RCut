@@ -45,14 +45,20 @@ pub fn register(window: &WebviewWindow) -> tauri::Result<()> {
                 return Ok(());
             }
 
-            let paths = read_file_paths(&args).unwrap_or_default();
+            let paths = read_file_paths(&args).unwrap_or_else(|error| {
+                eprintln!("[linked-files] failed to read file paths: {error:?}");
+                Vec::new()
+            });
             let response = json!({
                 "type": RESOLVED_PATHS,
                 "requestId": request["requestId"],
                 "paths": paths,
             });
             let response = HSTRING::from(response.to_string());
-            sender.PostWebMessageAsJson(PCWSTR(response.as_ptr()))?;
+            if let Err(error) = sender.PostWebMessageAsJson(PCWSTR(response.as_ptr())) {
+                eprintln!("[linked-files] failed to post resolved paths: {error:?}");
+                return Err(error);
+            }
             Ok(())
         }));
 
