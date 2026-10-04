@@ -9,6 +9,7 @@ import {
 	moveTransitionsToSplitRightHalves,
 	reconcileTransitions,
 	removeTransition,
+	restoreTransitionsAfterRipple,
 	setTransitionOnCut,
 	updateTransition,
 } from "@/transitions/edit";
@@ -245,6 +246,89 @@ describe("moveTransitionsToSplitRightHalves", () => {
 	test("returns the same object when nothing was split", () => {
 		const tracks = splitTracks();
 		expect(moveTransitionsToSplitRightHalves({ tracks, rightHalfIds: new Map() })).toBe(tracks);
+	});
+});
+
+describe("restoreTransitionsAfterRipple", () => {
+	// No test for commands without timing changes: applyRippleIfEnabled returns
+	// before restoring when there are no ripple adjustments.
+
+	test("restores a transition whose cut re-formed after a rippled trim", () => {
+		const beforeTracks = sceneTracks({
+			main: videoTrack({
+				elements: [
+					clip({ id: "a", start: 0, duration: 100 }),
+					clip({ id: "b", start: 100, duration: 100 }),
+				],
+				transitions: [transition()],
+			}),
+		});
+		// A's end was trimmed to 80 (which dropped the transition), then ripple closed the gap.
+		const rippled = sceneTracks({
+			main: videoTrack({
+				elements: [
+					clip({ id: "a", start: 0, duration: 80 }),
+					clip({ id: "b", start: 80, duration: 100 }),
+				],
+			}),
+		});
+		const result = reconcileTransitions({
+			tracks: restoreTransitionsAfterRipple({ beforeTracks, tracks: rippled }),
+		});
+		expect(result.main.transitions).toEqual([transition()]);
+	});
+
+	test("does not keep transitions of a deleted clip", () => {
+		const beforeTracks = sceneTracks({
+			main: videoTrack({
+				elements: [
+					clip({ id: "a", start: 0, duration: 100 }),
+					clip({ id: "b", start: 100, duration: 100 }),
+					clip({ id: "c", start: 200, duration: 100 }),
+				],
+				transitions: [transition(), transition({ id: "bc", fromElementId: "b", toElementId: "c" })],
+			}),
+		});
+		// B was deleted, then ripple moved C up against A.
+		const rippled = sceneTracks({
+			main: videoTrack({
+				elements: [
+					clip({ id: "a", start: 0, duration: 100 }),
+					clip({ id: "c", start: 100, duration: 100 }),
+				],
+			}),
+		});
+		const result = reconcileTransitions({
+			tracks: restoreTransitionsAfterRipple({ beforeTracks, tracks: rippled }),
+		});
+		expect(result.main.transitions).toEqual([]);
+	});
+
+	test("keeps the current transition when both have the same id", () => {
+		const beforeTracks = sceneTracks({
+			main: videoTrack({
+				elements: [
+					clip({ id: "a", start: 0, duration: 100 }),
+					clip({ id: "b", start: 100, duration: 100 }),
+				],
+				transitions: [transition()],
+			}),
+		});
+		// The command changed the transition; the old entry must not come back.
+		const changed = transition({ type: "whip-pan", duration: t(40) });
+		const current = sceneTracks({
+			main: videoTrack({
+				elements: [
+					clip({ id: "a", start: 0, duration: 100 }),
+					clip({ id: "b", start: 100, duration: 100 }),
+				],
+				transitions: [changed],
+			}),
+		});
+		const result = reconcileTransitions({
+			tracks: restoreTransitionsAfterRipple({ beforeTracks, tracks: current }),
+		});
+		expect(result.main.transitions).toEqual([changed]);
 	});
 });
 

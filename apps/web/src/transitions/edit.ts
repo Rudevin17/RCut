@@ -205,6 +205,39 @@ export function moveTransitionsToSplitRightHalves({
 	};
 }
 
+/**
+ * A command's own `updateTracks` reconciles before ripple closes the gaps, so
+ * it drops transitions whose cut was open at that moment. Merges each video
+ * track's pre-command transitions back in by id, keeping the current entry
+ * when both exist (a split's remapped transition wins). Run
+ * `reconcileTransitions` afterwards to drop those whose cut did not re-form.
+ */
+export function restoreTransitionsAfterRipple({
+	beforeTracks,
+	tracks,
+}: {
+	beforeTracks: SceneTracks;
+	tracks: SceneTracks;
+}): SceneTracks {
+	const restoreTrack = (track: VideoTrack): VideoTrack => {
+		const before = getVideoTrackById({ tracks: beforeTracks, trackId: track.id });
+		const current = track.transitions ?? [];
+		const currentIds = new Set(current.map((transition) => transition.id));
+		const restored = (before?.transitions ?? []).filter(
+			(transition) => !currentIds.has(transition.id),
+		);
+		return restored.length === 0 ? track : { ...track, transitions: [...current, ...restored] };
+	};
+
+	return {
+		...tracks,
+		main: restoreTrack(tracks.main),
+		overlay: tracks.overlay.map((track) =>
+			track.type === "video" ? restoreTrack(track) : track,
+		),
+	};
+}
+
 /** Drops transitions whose cut no longer exists and clamps durations. */
 export function reconcileTransitions({ tracks }: { tracks: SceneTracks }): SceneTracks {
 	let changed = false;

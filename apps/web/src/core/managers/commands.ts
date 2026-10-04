@@ -3,6 +3,7 @@ import type { Command, CommandResult } from "@/commands";
 import type { EditorSelectionSnapshot } from "@/selection/editor-selection";
 import { applyRippleAdjustments, computeRippleAdjustments } from "@/ripple";
 import type { SceneTracks } from "@/timeline/types";
+import { restoreTransitionsAfterRipple } from "@/transitions/edit";
 
 interface CommandHistoryEntry {
 	command: Command;
@@ -141,6 +142,8 @@ export class CommandManager {
 			beforeTracks,
 			afterTracks,
 		});
+		// Without timing changes nothing re-forms, so transitions the command
+		// removed on purpose stay removed.
 		if (adjustments.length === 0) {
 			return;
 		}
@@ -149,6 +152,8 @@ export class CommandManager {
 			tracks: afterTracks,
 			adjustments,
 		});
-		this.editor.timeline.updateTracks(tracksWithRipple);
+		this.editor.timeline.updateTracks(
+			restoreTransitionsAfterRipple({ beforeTracks, tracks: tracksWithRipple }),
+		);
 	}
 }
