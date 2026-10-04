@@ -1,5 +1,9 @@
 import { BUILT_IN_EXPORT_PRESETS } from "@/export/presets";
-import { DEFAULT_EXPORT_SETTINGS, type ExportSettings } from "@/export/settings";
+import {
+	AUDIO_BITRATE_KBPS_VALUES,
+	DEFAULT_EXPORT_SETTINGS,
+	type ExportSettings,
+} from "@/export/settings";
 
 export interface CustomExportPreset {
 	id: string;
@@ -51,6 +55,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 	return typeof value === "object" && value !== null;
 }
 
+/** Older stored values (such as 320 kbps) are no longer offered, so they fall back to the default. */
+function withSupportedAudioBitrate({ settings }: { settings: ExportSettings }): ExportSettings {
+	if (AUDIO_BITRATE_KBPS_VALUES.includes(settings.audioBitrateKbps)) return settings;
+	return { ...settings, audioBitrateKbps: DEFAULT_EXPORT_SETTINGS.audioBitrateKbps };
+}
+
 /** Brings any older stored export state up to the current shape. */
 export function migrateExportSettingsState({
 	persisted,
@@ -59,11 +69,17 @@ export function migrateExportSettingsState({
 }): PersistedExportSettings {
 	const state = isRecord(persisted) ? persisted : {};
 	const lastSettings = isRecord(state.lastSettings) ? state.lastSettings : {};
+	const customPresets = Array.isArray(state.customPresets)
+		? (state.customPresets as CustomExportPreset[])
+		: [];
 	return {
 		exportFolder: typeof state.exportFolder === "string" ? state.exportFolder : null,
-		lastSettings: { ...DEFAULT_EXPORT_SETTINGS, ...(lastSettings as Partial<ExportSettings>) },
-		customPresets: Array.isArray(state.customPresets)
-			? (state.customPresets as CustomExportPreset[])
-			: [],
+		lastSettings: withSupportedAudioBitrate({
+			settings: { ...DEFAULT_EXPORT_SETTINGS, ...(lastSettings as Partial<ExportSettings>) },
+		}),
+		customPresets: customPresets.map((preset) => ({
+			...preset,
+			settings: withSupportedAudioBitrate({ settings: preset.settings }),
+		})),
 	};
 }

@@ -86,7 +86,7 @@ describe("resolveEncodeParams", () => {
 				frameRate: "60",
 				videoBitrate: { kind: "by-fps", mbpsUpTo30: 40, mbpsAbove30: 60 },
 				bitrateMode: "constant",
-				audioBitrateKbps: 320,
+				audioBitrateKbps: 128,
 			},
 			projectSize: landscape,
 			projectFps: fps(30),
@@ -98,7 +98,7 @@ describe("resolveEncodeParams", () => {
 			videoBitrate: 60_000_000,
 			bitrateMode: "constant",
 			includeAudio: true,
-			audioBitrate: 320_000,
+			audioBitrate: 128_000,
 		});
 	});
 

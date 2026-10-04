@@ -16,7 +16,7 @@ export const EXPORT_FRAME_RATE_VALUES = [
 ] as const;
 export type ExportFrameRate = (typeof EXPORT_FRAME_RATE_VALUES)[number];
 
-export const AUDIO_BITRATE_KBPS_VALUES = [128, 192, 320] as const;
+export const AUDIO_BITRATE_KBPS_VALUES = [128, 192] as const;
 export type AudioBitrateKbps = (typeof AUDIO_BITRATE_KBPS_VALUES)[number];
 
 export const BITRATE_MODE_VALUES = ["variable", "constant"] as const;

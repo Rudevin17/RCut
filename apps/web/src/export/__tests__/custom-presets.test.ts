@@ -54,4 +54,16 @@ describe("migrateExportSettingsState", () => {
 		expect(migrated.lastSettings).toEqual({ ...DEFAULT_EXPORT_SETTINGS, resolution: "720" });
 		expect(migrated.customPresets).toEqual([mine]);
 	});
+
+	test("an unsupported stored audio bitrate falls back to the default", () => {
+		const migrated = migrateExportSettingsState({
+			persisted: {
+				exportFolder: null,
+				lastSettings: { audioBitrateKbps: 320 },
+				customPresets: [{ ...mine, settings: { ...DEFAULT_EXPORT_SETTINGS, audioBitrateKbps: 320 } }],
+			},
+		});
+		expect(migrated.lastSettings.audioBitrateKbps).toBe(192);
+		expect(migrated.customPresets[0].settings.audioBitrateKbps).toBe(192);
+	});
 });

@@ -49,7 +49,7 @@ export const useExportSettingsStore = create<ExportSettingsState>()(
 		}),
 		{
 			name: "rcut-export-settings",
-			version: 1,
+			version: 2,
 			migrate: (persisted) => migrateExportSettingsState({ persisted }),
 		},
 	),

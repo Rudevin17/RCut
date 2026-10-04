@@ -43,7 +43,9 @@ Exports get professional output controls: resolution, frame rate and bitrate. Th
 | `videoBitrate` | `{ kind: "quality", quality: ExportQuality }` \| `{ kind: "custom", mbps: number }` | quality `high` |
 | `bitrateMode` | `variable` \| `constant` | `variable` |
 | `includeAudio` | boolean | `true` |
-| `audioBitrateKbps` | `128` \| `192` \| `320` | `192` |
+| `audioBitrateKbps` | `128` \| `192` | `192` |
+
+Windows' AAC encoder supports up to 192 kbps. 256 and 320 kbps are rejected by `AudioEncoder.isConfigSupported`, so they are not offered.
 
 - **Fractional rates.** These map to rationals: 23.976 → 24000/1001, 29.97 → 30000/1001 and 59.94 → 60000/1001.
 - **Custom Mbps** is clamped to [1, 200].
