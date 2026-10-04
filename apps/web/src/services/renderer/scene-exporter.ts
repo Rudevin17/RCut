@@ -33,6 +33,11 @@ type ExportParams = {
 type VideoCodec = "avc" | "vp9";
 type HardwareAcceleration = "no-preference" | "prefer-hardware" | "prefer-software";
 
+/** WebView2's software encoder sometimes stops responding without any error, so a frame that takes this long fails the export. */
+const STALL_TIMEOUT_MS = 20_000;
+/** Cancelling the output can hang on a stuck encoder, so it gets this long before we move on. */
+const OUTPUT_CANCEL_TIMEOUT_MS = 2_000;
+
 const qualityMap: Record<ExportQuality, Quality> = {
 	low: QUALITY_LOW,
 	medium: QUALITY_MEDIUM,
@@ -59,6 +64,9 @@ class EncodeError extends Error {
 	}
 }
 
+/** Thrown inside an encode attempt when the user cancels, so the attempt unwinds immediately. */
+class ExportCancelled extends Error {}
+
 export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 	private renderer: CanvasRenderer;
 	private renderWidth: number;
@@ -67,9 +75,14 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 	private audioBuffer?: AudioBuffer;
 
 	private isCancelled = false;
+	private cancelSignal: Promise<void>;
+	private resolveCancel!: () => void;
 
 	constructor({ renderWidth, renderHeight, encode, audioBuffer }: ExportParams) {
 		super();
+		this.cancelSignal = new Promise<void>((resolve) => {
+			this.resolveCancel = resolve;
+		});
 		this.renderer = new CanvasRenderer({
 			width: renderWidth,
 			height: renderHeight,
@@ -83,6 +96,52 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 
 	cancel(): void {
 		this.isCancelled = true;
+		this.resolveCancel();
+	}
+
+	/** Awaits `promise`, but gives up when the user cancels (ExportCancelled) or it takes longer than STALL_TIMEOUT_MS (an Error naming `frame`). */
+	private async guard<T>({
+		promise,
+		frame,
+	}: {
+		promise: Promise<T>;
+		frame: number;
+	}): Promise<T> {
+		// If the race is lost, the abandoned promise may still reject later; that must not surface.
+		promise.catch(() => {});
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const stalled = new Promise<never>((_, reject) => {
+			timer = setTimeout(
+				() =>
+					reject(
+						new Error(
+							`The video encoder stopped responding while exporting (frame ${frame}). Try exporting again, or choose MP4.`,
+						),
+					),
+				STALL_TIMEOUT_MS,
+			);
+		});
+		const cancelled = this.cancelSignal.then((): never => {
+			throw new ExportCancelled();
+		});
+		try {
+			return await Promise.race([promise, stalled, cancelled]);
+		} finally {
+			clearTimeout(timer);
+		}
+	}
+
+	/** Cancels the output without waiting forever on a stuck encoder. */
+	private async cancelOutput({ output }: { output: Output }): Promise<void> {
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const timeout = new Promise<void>((resolve) => {
+			timer = setTimeout(resolve, OUTPUT_CANCEL_TIMEOUT_MS);
+		});
+		try {
+			await Promise.race([output.cancel().catch(() => {}), timeout]);
+		} finally {
+			clearTimeout(timer);
+		}
 	}
 
 	async export({
@@ -204,22 +263,29 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 
 			for (let i = 0; i < frameCount; i++) {
 				if (this.isCancelled) {
-					await output.cancel();
+					await this.cancelOutput({ output });
 					return null;
 				}
 
 				const timeTicks = i * ticksPerFrame;
 				const timeSeconds = mediaTimeToSeconds({ time: timeTicks });
-				await this.renderer.render({ node: rootNode, time: timeTicks });
+				const frame = i + 1;
+				await this.guard({
+					promise: this.renderer.render({ node: rootNode, time: timeTicks }),
+					frame,
+				});
 				encodeCanvas.draw();
-				await videoSource.add(timeSeconds, 1 / fpsFloat);
+				await this.guard({
+					promise: videoSource.add(timeSeconds, 1 / fpsFloat),
+					frame,
+				});
 				framesEncoded++;
 
 				this.emit("progress", i / frameCount);
 			}
 
 			if (this.isCancelled) {
-				await output.cancel();
+				await this.cancelOutput({ output });
 				return null;
 			}
 
@@ -229,12 +295,13 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 
 			return output.target.buffer;
 		} catch (error) {
-			await output.cancel().catch(() => {});
+			await this.cancelOutput({ output });
+			if (error instanceof ExportCancelled) return null;
 			throw new EncodeError({ cause: error, framesEncoded });
 		}
 	}
 
-	/** Prefers the requested acceleration, falls back to the browser's choice, and fails clearly if neither can encode. */
+	/** Prefers hardware encoding, falls back to the browser's choice, and fails clearly if neither can encode. */
 	private async pickHardwareAcceleration({
 		codec,
 		bitrate,
@@ -243,10 +310,7 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 		bitrate: number | Quality;
 	}): Promise<HardwareAcceleration> {
 		const { width, height, bitrateMode, fps } = this.encode;
-		const candidates: HardwareAcceleration[] = [
-			this.encode.hardwareAcceleration,
-			"no-preference",
-		];
+		const candidates: HardwareAcceleration[] = ["prefer-hardware", "no-preference"];
 		for (const hardwareAcceleration of candidates) {
 			const supported = await canEncodeVideo(codec, {
 				width,
