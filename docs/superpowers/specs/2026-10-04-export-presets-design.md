@@ -45,7 +45,6 @@ Exports get professional output controls: resolution, frame rate and bitrate. Th
 | `bitrateMode` | `variable` \| `constant` | `variable` |
 | `includeAudio` | boolean | `true` |
 | `audioBitrateKbps` | `128` \| `192` \| `320` | `192` |
-| `hardwareEncoding` | boolean | `true` |
 
 - **Fractional rates.** These map to rationals: 23.976 → 24000/1001, 29.97 → 30000/1001 and 59.94 → 60000/1001.
 - **Custom Mbps** is clamped to [1, 200].
@@ -63,7 +62,7 @@ The bitrates follow YouTube's recommended SDR upload settings. Where a preset de
 | High quality master | project | project | Quality: very_high | any |
 | Small file | 720 | project | Quality: medium | any |
 
-Every built-in preset uses `mp4`, `variable`, audio on at 192 kbps and hardware encoding on.
+Every built-in preset uses `mp4`, `variable`, and audio on at 192 kbps.
 
 ## Pure logic (`apps/web/src/export/`, unit-tested, no UI or encoder imports)
 
@@ -84,12 +83,11 @@ Every built-in preset uses `mp4`, `variable`, audio on at 192 kbps and hardware 
   - `outputWidth` and `outputHeight`;
   - `videoBitrate` (a number or a `Quality` level);
   - `bitrateMode`;
-  - `audioBitrate` (bits per second);
-  - `hardwareAcceleration`.
+  - `audioBitrate` (bits per second).
 - **Rendering** stays at the project size.
   - If the output size equals the project size, the renderer's canvas feeds the encoder directly, as today.
   - Otherwise each frame is drawn onto an output-sized canvas with `imageSmoothingQuality = "high"`, and that canvas feeds `CanvasSource`. The aspect ratio always matches, so the frame is never stretched or cropped.
-- **Hardware fallback.** Before the output starts, RCut checks whether the video config is encodable with `prefer-hardware`.
+- **Hardware fallback.** There is no user setting: encoding always prefers hardware and falls back automatically. Before the output starts, RCut checks whether the video config is encodable with `prefer-hardware`.
   - If it is not, RCut uses `no-preference`.
   - If neither works, export fails before rendering with an error that names the resolution, fps and codec.
   - The exact API (WebCodecs `VideoEncoder.isConfigSupported` or mediabunny's encodability check) is decided in the plan after checking the mediabunny 1.41 API.
@@ -107,7 +105,7 @@ Every built-in preset uses `mp4`, `variable`, audio on at 192 kbps and hardware 
   - After the user edits any field, the dropdown reads `Custom (from <preset>)`.
   - Custom presets can be deleted with a trash icon.
 - **Visible fields:** Format, Resolution, Frame rate, and Bitrate (Quality select or Custom Mbps).
-- **"Advanced"** section, collapsed by default: VBR/CBR, Include audio with audio bitrate, Hardware encoding.
+- **"Advanced"** section, collapsed by default: VBR/CBR, Include audio with audio bitrate.
 - **Summary line**, e.g. `3840×2160 · 59.94 fps · 60 Mbps · H.264`. A Quality bitrate shows its level name instead of a number.
 - **Warnings** from `getPresetWarnings` appear inline in amber.
 - **"Save as preset…"** takes a name. An empty or duplicate name is rejected inline.
@@ -115,6 +113,10 @@ Every built-in preset uses `mp4`, `variable`, audio on at 192 kbps and hardware 
 ## Error handling
 
 - An unsupported encoder config fails before rendering, with a clear toast, and no file is written.
+- **Encoder stall guard.** WebView2's software encoder can stop responding without an error.
+  - Each frame's render and encode step races a 20 s stall timer and the cancel signal.
+  - If the timer wins, the export fails with "The video encoder stopped responding while exporting (frame N). Try exporting again, or choose MP4." and the user can retry. A stall after frames were added is never retried automatically.
+  - Cancel always ends the export, even while the encoder is stuck. Cancelling the output itself is capped at 2 s.
 - Every other failure path (save errors, the Downloads fallback, cancellation) is unchanged.
 
 ## Testing
@@ -132,5 +134,5 @@ Every built-in preset uses `mp4`, `variable`, audio on at 192 kbps and hardware 
   - the same project → Small file (1280×720);
   - a 9:16 project → Shorts (1080×1920);
   - a 16:9 project → Shorts shows the warning;
-  - an export with hardware encoding off;
+  - cancelling an export mid-render;
   - saving, re-selecting and deleting a custom preset.

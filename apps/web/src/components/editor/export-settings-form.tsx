@@ -374,14 +374,6 @@ export function ExportSettingsForm({
 							</SelectContent>
 						</Select>
 					</Field>
-					<div className="flex items-center space-x-2">
-						<Checkbox
-							id="hardware-encoding"
-							checked={settings.hardwareEncoding}
-							onCheckedChange={(checked) => update({ hardwareEncoding: !!checked })}
-						/>
-						<Label htmlFor="hardware-encoding">Hardware encoding (faster)</Label>
-					</div>
 				</SectionContent>
 			</Section>
 

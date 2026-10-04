@@ -39,7 +39,6 @@ export interface ExportSettings {
 	bitrateMode: BitrateMode;
 	includeAudio: boolean;
 	audioBitrateKbps: AudioBitrateKbps;
-	hardwareEncoding: boolean;
 }
 
 export const DEFAULT_EXPORT_SETTINGS: ExportSettings = {
@@ -50,5 +49,4 @@ export const DEFAULT_EXPORT_SETTINGS: ExportSettings = {
 	bitrateMode: "variable",
 	includeAudio: true,
 	audioBitrateKbps: 192,
-	hardwareEncoding: true,
 };

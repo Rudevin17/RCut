@@ -29,7 +29,6 @@ export interface EncodeParams {
 	includeAudio: boolean;
 	/** Bits per second. */
 	audioBitrate: number;
-	hardwareAcceleration: "prefer-hardware" | "prefer-software";
 }
 
 export const EXPORT_QUALITY_LABELS: Record<ExportQuality, string> = {
@@ -131,7 +130,6 @@ export function resolveEncodeParams({
 		bitrateMode: settings.bitrateMode,
 		includeAudio: settings.includeAudio,
 		audioBitrate: settings.audioBitrateKbps * 1_000,
-		hardwareAcceleration: settings.hardwareEncoding ? "prefer-hardware" : "prefer-software",
 	};
 }
 

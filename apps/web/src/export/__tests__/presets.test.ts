@@ -26,7 +26,6 @@ describe("built-in export presets", () => {
 			expect(preset.settings.bitrateMode).toBe("variable");
 			expect(preset.settings.includeAudio).toBe(true);
 			expect(preset.settings.audioBitrateKbps).toBe(192);
-			expect(preset.settings.hardwareEncoding).toBe(true);
 		}
 	});
 

@@ -78,7 +78,7 @@ describe("clampMbps", () => {
 });
 
 describe("resolveEncodeParams", () => {
-	test("combines size, fps, bitrate, audio and hardware preference", () => {
+	test("combines size, fps, bitrate, audio", () => {
 		const params = resolveEncodeParams({
 			settings: {
 				...DEFAULT_EXPORT_SETTINGS,
@@ -87,7 +87,6 @@ describe("resolveEncodeParams", () => {
 				videoBitrate: { kind: "by-fps", mbpsUpTo30: 40, mbpsAbove30: 60 },
 				bitrateMode: "constant",
 				audioBitrateKbps: 320,
-				hardwareEncoding: false,
 			},
 			projectSize: landscape,
 			projectFps: fps(30),
@@ -101,13 +100,11 @@ describe("resolveEncodeParams", () => {
 			bitrateMode: "constant",
 			includeAudio: true,
 			audioBitrate: 320_000,
-			hardwareAcceleration: "prefer-software",
 		});
 	});
 
-	test("hardware encoding on prefers hardware", () => {
+	test("default settings keep the quality level as the bitrate", () => {
 		const params = resolveEncodeParams({ settings: DEFAULT_EXPORT_SETTINGS, projectSize: landscape, projectFps: fps(30) });
-		expect(params.hardwareAcceleration).toBe("prefer-hardware");
 		expect(params.videoBitrate).toBe("high");
 	});
 });
