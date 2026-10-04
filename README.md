@@ -1,8 +1,18 @@
 # RCut
 
-A local-only video editor for Windows, forked from [opencut-classic](https://github.com/OpenCut-app/opencut-classic) (MIT).
+A local-only video editor for Windows, forked from [opencut-classic](https://github.com/OpenCut-app/opencut-classic) (MIT). It runs as a standalone `.exe`. There are no accounts, no server and no uploads, so your projects and media stay on your machine.
 
-No accounts, no server. Projects are stored on this machine.
+- **Linked media.** RCut references your videos where they sit on disk instead of copying them into browser storage, so large files work. If a file moves, use "Locate file" to relink it.
+- **31 GPU transitions** in three groups:
+  - **Basic**
+  - **Cinematic:** Cross Zoom, Film Burn, Page Curl, Cube and more
+  - **Gaming:** glitch, datamosh, TV static, zoom punch, shake hit and more
+
+  Most are ported from [gl-transitions](https://github.com/gl-transitions/gl-transitions). The rest are RCut originals.
+- **Export where you want.** Export to a remembered folder or use "Export as…", then jump to the result with "Show in folder".
+- **Built with** Tauri v2 (WebView2), Next.js, and a Rust/wgpu renderer compiled to WebAssembly.
+
+Third-party credits are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ## Requirements
 
