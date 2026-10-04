@@ -169,6 +169,42 @@ export function removeTransition({
 	});
 }
 
+/**
+ * After a split, the right half (new id) owns the original clip's outgoing cut,
+ * so outgoing transitions move to it. Incoming transitions stay on the left
+ * half, which keeps the original id.
+ */
+export function moveTransitionsToSplitRightHalves({
+	tracks,
+	rightHalfIds,
+}: {
+	tracks: SceneTracks;
+	rightHalfIds: Map<string, string>;
+}): SceneTracks {
+	if (rightHalfIds.size === 0) return tracks;
+
+	const remapTrack = (track: VideoTrack): VideoTrack => {
+		if (!track.transitions?.some((transition) => rightHalfIds.has(transition.fromElementId))) {
+			return track;
+		}
+		return {
+			...track,
+			transitions: track.transitions.map((transition) => {
+				const rightHalfId = rightHalfIds.get(transition.fromElementId);
+				return rightHalfId ? { ...transition, fromElementId: rightHalfId } : transition;
+			}),
+		};
+	};
+
+	return {
+		...tracks,
+		main: remapTrack(tracks.main),
+		overlay: tracks.overlay.map((track) =>
+			track.type === "video" ? remapTrack(track) : track,
+		),
+	};
+}
+
 /** Drops transitions whose cut no longer exists and clamps durations. */
 export function reconcileTransitions({ tracks }: { tracks: SceneTracks }): SceneTracks {
 	let changed = false;

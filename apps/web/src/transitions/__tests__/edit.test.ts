@@ -6,6 +6,7 @@ import {
 	findCuts,
 	getElementCut,
 	getVideoTrackById,
+	moveTransitionsToSplitRightHalves,
 	reconcileTransitions,
 	removeTransition,
 	setTransitionOnCut,
@@ -198,6 +199,52 @@ describe("transition edits", () => {
 	test("removeTransition removes by id", () => {
 		const tracks = sceneTracks({ main: { ...base().main, transitions: [transition()] } });
 		expect(removeTransition({ tracks, trackId: "main", transitionId: "tr" }).main.transitions).toEqual([]);
+	});
+});
+
+describe("moveTransitionsToSplitRightHalves", () => {
+	const incoming = transition({ id: "in", fromElementId: "x", toElementId: "a" });
+	const outgoing = transition({ id: "out", fromElementId: "a", toElementId: "b" });
+	// "a" (100-200) was split at 150: the left half keeps "a", the right half is "a2".
+	const splitTracks = ({ keepLeft = true }: { keepLeft?: boolean } = {}) =>
+		sceneTracks({
+			main: videoTrack({
+				elements: [
+					clip({ id: "x", start: 0, duration: 100 }),
+					...(keepLeft ? [clip({ id: "a", start: 100, duration: 50 })] : []),
+					clip({ id: "a2", start: 150, duration: 50 }),
+					clip({ id: "b", start: 200, duration: 100 }),
+				],
+				transitions: [incoming, outgoing],
+			}),
+		});
+
+	test("keeps the outgoing transition on the right half and the incoming one on the left", () => {
+		const result = reconcileTransitions({
+			tracks: moveTransitionsToSplitRightHalves({
+				tracks: splitTracks(),
+				rightHalfIds: new Map([["a", "a2"]]),
+			}),
+		});
+		expect(result.main.transitions).toEqual([
+			incoming,
+			{ ...outgoing, fromElementId: "a2" },
+		]);
+	});
+
+	test("keeps the outgoing transition when only the right half is kept", () => {
+		const result = reconcileTransitions({
+			tracks: moveTransitionsToSplitRightHalves({
+				tracks: splitTracks({ keepLeft: false }),
+				rightHalfIds: new Map([["a", "a2"]]),
+			}),
+		});
+		expect(result.main.transitions).toEqual([{ ...outgoing, fromElementId: "a2" }]);
+	});
+
+	test("returns the same object when nothing was split", () => {
+		const tracks = splitTracks();
+		expect(moveTransitionsToSplitRightHalves({ tracks, rightHalfIds: new Map() })).toBe(tracks);
 	});
 });
 
