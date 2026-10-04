@@ -34,7 +34,7 @@ import {
 	SectionTitle,
 } from "@/components/section";
 import { useEditor } from "@/editor/use-editor";
-import { DEFAULT_EXPORT_OPTIONS } from "@/export/defaults";
+import { DEFAULT_EXPORT_SETTINGS } from "@/export/settings";
 import { getExportFileName } from "@/export/export-file-name";
 import { useExportSettingsStore } from "@/export/export-settings-store";
 import {
@@ -167,14 +167,10 @@ function ExportPopover({
 	const activeProject = useEditor((e) => e.project.getActive());
 	const exportState = useEditor((e) => e.project.getExportState());
 	const { isExporting, progress, result: exportResult } = exportState;
-	const [format, setFormat] = useState<ExportFormat>(
-		DEFAULT_EXPORT_OPTIONS.format,
-	);
-	const [quality, setQuality] = useState<ExportQuality>(
-		DEFAULT_EXPORT_OPTIONS.quality,
-	);
+	const [format, setFormat] = useState<ExportFormat>(DEFAULT_EXPORT_SETTINGS.format);
+	const [quality, setQuality] = useState<ExportQuality>("high");
 	const [shouldIncludeAudio, setShouldIncludeAudio] = useState<boolean>(
-		DEFAULT_EXPORT_OPTIONS.includeAudio ?? true,
+		DEFAULT_EXPORT_SETTINGS.includeAudio,
 	);
 
 	const isNativeExport = isNativeExportAvailable();
@@ -248,10 +244,10 @@ function ExportPopover({
 		}
 
 		const result = await editor.project.export({
-			options: {
+			settings: {
+				...DEFAULT_EXPORT_SETTINGS,
 				format,
-				quality,
-				fps: activeProject.settings.fps,
+				videoBitrate: { kind: "quality", quality },
 				includeAudio: shouldIncludeAudio,
 			},
 		});

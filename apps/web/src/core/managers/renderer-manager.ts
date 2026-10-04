@@ -1,6 +1,8 @@
 import type { EditorCore } from "@/core";
 import type { RootNode } from "@/services/renderer/nodes/root-node";
-import type { ExportOptions, ExportResult } from "@/export";
+import type { ExportResult } from "@/export";
+import type { ExportSettings } from "@/export/settings";
+import { resolveEncodeParams } from "@/export/resolve";
 import { CanvasRenderer } from "@/services/renderer/canvas-renderer";
 import { SceneExporter } from "@/services/renderer/scene-exporter";
 import { buildScene } from "@/services/renderer/scene-builder";
@@ -139,16 +141,14 @@ export class RendererManager {
 	}
 
 	async exportProject({
-		options,
+		settings,
 		onProgress,
 		onCancel,
 	}: {
-		options: ExportOptions;
+		settings: ExportSettings;
 		onProgress?: ({ progress }: { progress: number }) => void;
 		onCancel?: () => boolean;
 	}): Promise<ExportResult> {
-		const { format, quality, fps, includeAudio } = options;
-
 		try {
 			const tracks = this.editor.scenes.getActiveScene().tracks;
 			const mediaAssets = this.editor.media.getAssets();
@@ -163,8 +163,13 @@ export class RendererManager {
 				return { success: false, error: "Project is empty" };
 			}
 
-			const exportFps = fps ?? activeProject.settings.fps;
 			const canvasSize = activeProject.settings.canvasSize;
+			const encode = resolveEncodeParams({
+				settings,
+				projectSize: canvasSize,
+				projectFps: activeProject.settings.fps,
+			});
+			const { includeAudio } = encode;
 
 			let audioBuffer: AudioBuffer | null = null;
 			if (includeAudio) {
@@ -185,12 +190,9 @@ export class RendererManager {
 			});
 
 			const exporter = new SceneExporter({
-				width: canvasSize.width,
-				height: canvasSize.height,
-				fps: exportFps,
-				format,
-				quality,
-				shouldIncludeAudio: !!includeAudio,
+				renderWidth: canvasSize.width,
+				renderHeight: canvasSize.height,
+				encode,
 				audioBuffer: audioBuffer || undefined,
 			});
 
