@@ -211,9 +211,10 @@ function ExportPopover({
 	}: { saveAs?: boolean } = {}) => {
 		if (!activeProject) return;
 
+		const extension = getExportFileExtension({ format });
 		const fileName = getExportFileName({
 			projectName: activeProject.metadata.name,
-			extension: getExportFileExtension({ format }),
+			extension,
 		});
 
 		let destination: ExportDestination = { kind: "download" };
@@ -228,8 +229,18 @@ function ExportPopover({
 					folder: targetFolder,
 					fileName,
 					extension: format,
+				}).catch((error) => {
+					toast.error("Couldn't open the save dialog", {
+						description: errorMessage({ error }),
+					});
+					return null;
 				});
 				if (!path) return;
+				// Check before rendering, so a wrong extension doesn't waste a render.
+				if (!path.toLowerCase().endsWith(extension)) {
+					toast.error(`The file name must end in ${extension}`);
+					return;
+				}
 				destination = { kind: "file", path };
 			} else {
 				destination = { kind: "folder", folder: targetFolder };
