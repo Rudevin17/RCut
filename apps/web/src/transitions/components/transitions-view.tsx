@@ -79,6 +79,7 @@ function TransitionPreviewCanvas({ type }: { type: string }) {
 	}, [render]);
 
 	const startAnimation = () => {
+		if (frameRef.current !== null) cancelAnimationFrame(frameRef.current);
 		const start = performance.now();
 		const tick = (now: number) => {
 			render(((now - start) % 1200) / 1200);

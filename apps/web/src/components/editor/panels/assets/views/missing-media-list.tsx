@@ -66,6 +66,7 @@ function MissingMediaRow({
 				size="sm"
 				variant="outline"
 				disabled={isRelinking}
+				aria-label={`Locate ${asset.name}`}
 				onClick={() => inputRef.current?.click()}
 			>
 				Locate file
