@@ -6,7 +6,8 @@ import { resolveEncodeParams } from "@/export/resolve";
 import { CanvasRenderer } from "@/services/renderer/canvas-renderer";
 import { SceneExporter } from "@/services/renderer/scene-exporter";
 import { buildScene } from "@/services/renderer/scene-builder";
-import { createTimelineAudioBuffer } from "@/media/audio";
+import { EXPORT_SAMPLE_RATE } from "@/media/audio";
+import { TimelineAudioStream } from "@/media/audio-export/timeline-audio-stream";
 import { formatTimecode } from "opencut-wasm";
 import { frameRateToFloat } from "@/fps/utils";
 import { downloadBlob } from "@/utils/browser";
@@ -149,6 +150,7 @@ export class RendererManager {
 		onProgress?: ({ progress }: { progress: number }) => void;
 		onCancel?: () => boolean;
 	}): Promise<ExportResult> {
+		let audio: TimelineAudioStream | null = null;
 		try {
 			const tracks = this.editor.scenes.getActiveScene().tracks;
 			const mediaAssets = this.editor.media.getAssets();
@@ -171,15 +173,9 @@ export class RendererManager {
 			});
 			const { includeAudio } = encode;
 
-			let audioBuffer: AudioBuffer | null = null;
-			if (includeAudio) {
-				onProgress?.({ progress: 0.05 });
-				audioBuffer = await createTimelineAudioBuffer({
-					tracks,
-					mediaAssets,
-					duration,
-				});
-			}
+			audio = includeAudio
+				? await TimelineAudioStream.create({ tracks, mediaAssets, duration, sampleRate: EXPORT_SAMPLE_RATE })
+				: null;
 
 			const scene = buildScene({
 				tracks,
@@ -193,14 +189,11 @@ export class RendererManager {
 				renderWidth: canvasSize.width,
 				renderHeight: canvasSize.height,
 				encode,
-				audioBuffer: audioBuffer || undefined,
+				audio: audio ?? undefined,
 			});
 
 			exporter.on("progress", (progress) => {
-				const adjustedProgress = includeAudio
-					? 0.05 + progress * 0.95
-					: progress;
-				onProgress?.({ progress: adjustedProgress });
+				onProgress?.({ progress });
 			});
 
 			let cancelled = false;
@@ -238,6 +231,8 @@ export class RendererManager {
 				success: false,
 				error: error instanceof Error ? error.message : "Unknown export error",
 			};
+		} finally {
+			audio?.dispose();
 		}
 	}
 

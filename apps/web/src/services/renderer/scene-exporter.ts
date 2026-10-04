@@ -20,13 +20,14 @@ import type { RootNode } from "./nodes/root-node";
 import type { ExportQuality } from "@/export";
 import { formatFrameRate, type EncodeParams } from "@/export/resolve";
 import { CanvasRenderer } from "./canvas-renderer";
+import type { TimelineAudioStream } from "@/media/audio-export/timeline-audio-stream";
 
 type ExportParams = {
 	/** The project canvas size. Frames always render at this size. */
 	renderWidth: number;
 	renderHeight: number;
 	encode: EncodeParams;
-	audioBuffer?: AudioBuffer;
+	audio?: TimelineAudioStream;
 };
 
 type HardwareAcceleration = "no-preference" | "prefer-hardware" | "prefer-software";
@@ -70,12 +71,12 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 	private renderWidth: number;
 	private renderHeight: number;
 	private encode: EncodeParams;
-	private audioBuffer?: AudioBuffer;
+	private audio?: TimelineAudioStream;
 
 	private isCancelled = false;
 	private cancelController = new AbortController();
 
-	constructor({ renderWidth, renderHeight, encode, audioBuffer }: ExportParams) {
+	constructor({ renderWidth, renderHeight, encode, audio }: ExportParams) {
 		super();
 		this.renderer = new CanvasRenderer({
 			width: renderWidth,
@@ -85,7 +86,7 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 		this.renderWidth = renderWidth;
 		this.renderHeight = renderHeight;
 		this.encode = encode;
-		this.audioBuffer = audioBuffer;
+		this.audio = audio;
 	}
 
 	cancel(): void {
@@ -165,6 +166,7 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 				error.framesEncoded === 0 &&
 				!this.isCancelled;
 			if (!canRetry) throw error.cause;
+			this.audio?.reset();
 			try {
 				buffer = await this.encodeVideo({
 					...params,
@@ -228,14 +230,14 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 			output.addVideoTrack(videoSource, { frameRate: fpsFloat });
 
 			let audioSource: AudioBufferSource | null = null;
-			if (includeAudio && this.audioBuffer) {
+			if (includeAudio && this.audio) {
 				let audioCodec: "aac" | "opus" = "aac";
 
 				if (typeof AudioEncoder !== "undefined") {
 					const { supported } = await AudioEncoder.isConfigSupported({
 						codec: "mp4a.40.2",
-						sampleRate: this.audioBuffer.sampleRate,
-						numberOfChannels: this.audioBuffer.numberOfChannels,
+						sampleRate: this.audio.sampleRate,
+						numberOfChannels: this.audio.numberOfChannels,
 						bitrate: audioBitrate,
 					});
 					if (!supported) audioCodec = "opus";
@@ -250,10 +252,25 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 
 			await output.start();
 
-			if (audioSource && this.audioBuffer) {
-				await audioSource.add(this.audioBuffer);
-				audioSource.close();
-			}
+			const audioStallMessage =
+				"The audio stopped responding while exporting. Try exporting again.";
+			const pushAudioUntil = async (seconds: number) => {
+				if (!audioSource || !this.audio) return;
+				while (
+					!this.audio.done &&
+					this.audio.renderedSamples / this.audio.sampleRate < seconds
+				) {
+					const chunk = await this.guard({
+						promise: this.audio.nextChunk(),
+						stallMessage: audioStallMessage,
+					});
+					if (!chunk) break;
+					await this.guard({
+						promise: audioSource.add(chunk),
+						stallMessage: audioStallMessage,
+					});
+				}
+			};
 
 			for (let i = 0; i < frameCount; i++) {
 				if (this.isCancelled) {
@@ -264,6 +281,7 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 				const timeTicks = i * ticksPerFrame;
 				const timeSeconds = mediaTimeToSeconds({ time: timeTicks });
 				const stallMessage = `The video encoder stopped responding while exporting (frame ${i + 1}). Try exporting again.`;
+				if (this.audio) await pushAudioUntil(timeSeconds + this.audio.chunkSeconds);
 				await this.guard({
 					promise: this.renderer.render({ node: rootNode, time: timeTicks }),
 					stallMessage,
@@ -282,6 +300,9 @@ export class SceneExporter extends EventEmitter<SceneExporterEvents> {
 				await this.cancelOutput({ output });
 				return null;
 			}
+
+			await pushAudioUntil(Number.POSITIVE_INFINITY);
+			audioSource?.close();
 
 			// close() is synchronous; finalize() is what awaits the encoder flush, so it can hang like add() does.
 			// Once finalize has started, output.cancel() can't release a stuck encoder (a mediabunny limitation).
