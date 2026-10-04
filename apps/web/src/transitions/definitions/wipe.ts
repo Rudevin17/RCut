@@ -5,13 +5,13 @@ import {
 } from "@/transitions/definitions/shader-params";
 import type { TransitionDefinition } from "@/transitions/types";
 
-export const whipPanTransition: TransitionDefinition = {
-	type: "whip-pan",
-	name: "Whip Pan",
-	group: "gaming",
-	keywords: ["swipe", "motion blur", "fast", "slide"],
-	shader: "whip-pan",
-	defaultDurationSeconds: 0.35,
+export const wipeTransition: TransitionDefinition = {
+	type: "wipe",
+	name: "Wipe",
+	group: "basic",
+	keywords: ["wipe", "reveal", "sweep"],
+	shader: "wipe",
+	defaultDurationSeconds: 0.6,
 	params: [
 		{
 			key: "direction",
@@ -21,17 +21,17 @@ export const whipPanTransition: TransitionDefinition = {
 			options: DIRECTION_OPTIONS,
 		},
 		{
-			key: "strength",
-			label: "Blur",
+			key: "softness",
+			label: "Softness",
 			type: "number",
-			default: 0.25,
+			default: 0.1,
 			min: 0,
-			max: 1,
+			max: 0.5,
 			step: 0.05,
 		},
 	],
 	toShaderParams: ({ params }) => [
 		...directionVector({ params, key: "direction", fallback: "right" }),
-		numberParam({ params, key: "strength", fallback: 0.25 }),
+		numberParam({ params, key: "softness", fallback: 0.1 }),
 	],
 };

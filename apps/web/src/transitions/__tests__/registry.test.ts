@@ -25,6 +25,22 @@ describe("transition registry", () => {
 			"zoom-punch",
 			"spin-blur",
 			"shake-hit",
+			"fade-color",
+			"fade-color",
+			"slide",
+			"push",
+			"zoom-in-out",
+			"wipe",
+			"circle-open",
+			"cross-zoom",
+			"dreamy-zoom",
+			"linear-blur",
+			"film-burn",
+			"overexposure",
+			"swirl",
+			"cube",
+			"page-curl",
+			"crosswarp",
 		]);
 	});
 
@@ -37,9 +53,22 @@ describe("transition registry", () => {
 		const rustIds = [...source.matchAll(/\(\s*"([a-z0-9-]+)",\s*include_str!/g)].map(
 			(match) => match[1],
 		);
-		expect(TRANSITION_DEFINITIONS.map((definition) => definition.shader).sort()).toEqual(
-			rustIds.sort(),
-		);
+		const shaderIds = [...new Set(TRANSITION_DEFINITIONS.map((definition) => definition.shader))];
+		expect(shaderIds.sort()).toEqual(rustIds.sort());
+	});
+
+	test("basic transitions pack their params", () => {
+		const pack = (type: string, params = {}) => {
+			const definition = getTransitionDefinition({ type });
+			if (!definition) throw new Error(`${type} missing`);
+			return getTransitionShaderParams({ definition, params });
+		};
+		expect(pack("dip-to-black")).toEqual([0, 0, 0, 0.4]);
+		expect(pack("dip-to-white")).toEqual([1, 1, 1, 0.4]);
+		expect(pack("slide")).toEqual([-1, 0]);
+		expect(pack("push", { direction: "up" })).toEqual([0, 1]);
+		expect(pack("wipe")).toEqual([1, 0, 0.1]);
+		expect(pack("whip-pan", { direction: "constructor" })).toEqual([1, 0, 0.25]);
 	});
 
 	test("RCut originals pack their params", () => {
