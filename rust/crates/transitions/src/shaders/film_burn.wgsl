@@ -2,6 +2,7 @@
 // Author: Anastasia Dunbar
 // License: MIT
 // Uniform fixed at its default: Seed 2.31.
+// RCut: the burn colour is scaled by the clips' coverage.
 
 const FILM_BURN_SEED: f32 = 2.31;
 const FILM_BURN_PI: f32 = 3.14159265358979323;
@@ -92,5 +93,5 @@ fn transition(p_in: vec2f) -> vec4f {
     }
     blurred = blurred / FILM_BURN_REPEATS;
 
-    return blurred + vec4f(f, 0.0);
+    return blurred + vec4f(f * blurred.a, 0.0);
 }

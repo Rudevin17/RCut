@@ -32,5 +32,6 @@ fn transition(uv: vec2f) -> vec4f {
     color = color / f32(PUNCH_SAMPLES);
 
     let flash = pow(1.0 - abs(progress * 2.0 - 1.0), 6.0) * flash_amount;
-    return vec4f(mix(color.rgb, vec3f(1.0), flash), 1.0);
+    // Premultiplied: flash towards white at the clip's own coverage.
+    return vec4f(mix(color.rgb, vec3f(color.a), flash), color.a);
 }

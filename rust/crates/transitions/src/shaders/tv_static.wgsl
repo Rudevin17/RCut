@@ -2,6 +2,7 @@
 // Author: Brandon Anzaldi
 // License: MIT
 // Uniform fixed at its default: offset 0.05.
+// RCut: the static is scaled by the clips' coverage so it does not cover lower tracks.
 
 const TV_STATIC_OFFSET: f32 = 0.05;
 
@@ -18,5 +19,6 @@ fn transition(p: vec2f) -> vec4f {
     if (progress > 1.0 - TV_STATIC_OFFSET) {
         return getToColor(p);
     }
-    return vec4f(vec3f(tv_static_noise(p)), 1.0);
+    let coverage = mix(getFromColor(p).a, getToColor(p).a, progress);
+    return vec4f(vec3f(tv_static_noise(p)) * coverage, coverage);
 }

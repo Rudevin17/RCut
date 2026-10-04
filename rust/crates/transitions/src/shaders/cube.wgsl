@@ -2,6 +2,7 @@
 // Author: gre
 // License: MIT
 // Uniforms fixed at their defaults: persp 0.7, unzoom 0.3, reflection 0.4, floating 3.0.
+// RCut: the background starts transparent instead of black so lower tracks show through.
 
 const CUBE_PERSP: f32 = 0.7;
 const CUBE_UNZOOM: f32 = 0.3;
@@ -17,7 +18,7 @@ fn cube_in_bounds(p: vec2f) -> bool {
 }
 
 fn cube_bg_color(pfr_in: vec2f, pto_in: vec2f) -> vec4f {
-    var c = vec4f(0.0, 0.0, 0.0, 1.0);
+    var c = vec4f(0.0);
     let pfr = cube_project(pfr_in);
     if (cube_in_bounds(pfr)) {
         c = c + mix(vec4f(0.0), getFromColor(pfr), CUBE_REFLECTION * mix(1.0, 0.0, pfr.y));

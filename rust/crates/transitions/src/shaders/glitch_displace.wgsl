@@ -2,6 +2,7 @@
 // Author: Matt DesLauriers
 // License: MIT
 // (The original computes three voronoi values it never uses; they are omitted.)
+// RCut: the gray glitch layer takes its alpha from the samples it is built from, not 1.0.
 
 fn glitch_displace(tex: vec4f, tex_coord: vec2f, dot_depth: f32, texture_depth: f32, strength: f32) -> vec2f {
     let dis = tex * dot_depth + 1.0 - tex * texture_depth;
@@ -35,8 +36,9 @@ fn transition(uv: vec2f) -> vec4f {
     let d_color1 = getToColor(disp);
     let d_color2_source = getFromColor(disp2);
     let val = glitch_ease1(progress);
-    let gray = vec3f(dot(min(d_color2_source, d_color1).rgb, vec3f(0.299, 0.587, 0.114)));
-    let d_color2 = vec4f(gray, 1.0) * 2.0;
+    let d_min = min(d_color2_source, d_color1);
+    let gray = vec3f(dot(d_min.rgb, vec3f(0.299, 0.587, 0.114)));
+    let d_color2 = vec4f(gray, d_min.a) * 2.0;
     color1 = mix(color1, d_color2, smoothstep(0.0, 0.5, progress));
     // GLSL smoothstep(1.0, 0.5, p) == 1.0 - smoothstep(0.5, 1.0, p)
     color2 = mix(color2, d_color1, 1.0 - smoothstep(0.5, 1.0, progress));

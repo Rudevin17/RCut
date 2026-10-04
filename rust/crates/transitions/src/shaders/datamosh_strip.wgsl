@@ -3,6 +3,7 @@
 // License: MIT
 // Uniforms fixed at their defaults: strength 1.0, horizontalBars 42, verticalSlits 18,
 // tear 0.18, chroma 0.032, residue 0.62, noiseAmount 0.16, scanAmount 0.13, flashAmount 0.20.
+// RCut: alpha and the added sparks, noise and strobe follow the clips' coverage.
 
 const DM_STRENGTH: f32 = 1.0;
 const DM_HORIZONTAL_BARS: f32 = 42.0;
@@ -87,22 +88,18 @@ fn dm_vertical_mask(uv: vec2f, frame: f32) -> f32 {
 
 fn dm_chroma_from(uv_in: vec2f, s: vec2f) -> vec4f {
     let uv = dm_safe_uv(uv_in);
-    return vec4f(
-        getFromColor(dm_safe_uv(uv + s)).r,
-        getFromColor(uv).g,
-        getFromColor(dm_safe_uv(uv - s)).b,
-        1.0,
-    );
+    let red = getFromColor(dm_safe_uv(uv + s));
+    let green = getFromColor(uv);
+    let blue = getFromColor(dm_safe_uv(uv - s));
+    return vec4f(red.r, green.g, blue.b, max(red.a, max(green.a, blue.a)));
 }
 
 fn dm_chroma_to(uv_in: vec2f, s: vec2f) -> vec4f {
     let uv = dm_safe_uv(uv_in);
-    return vec4f(
-        getToColor(dm_safe_uv(uv - s)).r,
-        getToColor(uv).g,
-        getToColor(dm_safe_uv(uv + s)).b,
-        1.0,
-    );
+    let red = getToColor(dm_safe_uv(uv - s));
+    let green = getToColor(uv);
+    let blue = getToColor(dm_safe_uv(uv + s));
+    return vec4f(red.r, green.g, blue.b, max(red.a, max(green.a, blue.a)));
 }
 
 fn dm_distort_uv(uv: vec2f, dir: f32, b: f32, h: f32, v: f32, frame: f32) -> vec2f {
@@ -163,21 +160,22 @@ fn transition(uv: vec2f) -> vec4f {
     // Thin scan sparks and broken white lines.
     let hair_line = dm_stripe_y(uv, 190.0, frame + 55.0, 0.002, 0.012)
         * step(0.70, dm_hash2(vec2f(floor(uv.y * 190.0), frame + 56.0)));
-    var rgb = color.rgb + vec3f(0.72, 0.90, 1.0) * hair_line * b * 0.28;
+    let alpha = color.a;
+    var rgb = color.rgb + vec3f(0.72, 0.90, 1.0) * hair_line * b * 0.28 * alpha;
 
     let scan = 0.5 + 0.5 * sin(uv.y * 980.0 + progress * 130.0);
     rgb = rgb * (1.0 - DM_SCAN_AMOUNT * b * scan);
 
     let n_cell = floor(uv * vec2f(360.0 * ratio, 210.0));
     let n = dm_hash2(n_cell + vec2f(frame * 7.0, frame * 13.0));
-    rgb = rgb + (n - 0.5) * DM_NOISE_AMOUNT * b * (0.55 + glitch);
+    rgb = rgb + (n - 0.5) * DM_NOISE_AMOUNT * b * (0.55 + glitch) * alpha;
 
     // Slight desaturation during the damage peak.
     let luma = dot(rgb, vec3f(0.299, 0.587, 0.114));
     rgb = mix(rgb, vec3f(luma), 0.18 * b * glitch);
 
     let strobe = step(0.78, dm_hash2(vec2f(frame, 3.14))) * pow(b, 1.65);
-    rgb = rgb + vec3f(strobe * DM_FLASH_AMOUNT);
+    rgb = rgb + vec3f(strobe * DM_FLASH_AMOUNT * alpha);
 
-    return vec4f(clamp(rgb, vec3f(0.0), vec3f(1.0)), 1.0);
+    return vec4f(clamp(rgb, vec3f(0.0), vec3f(alpha)), alpha);
 }

@@ -3,6 +3,7 @@
 // License: MIT
 // Uniforms fixed at their defaults: rotation 6, scale 1.2.
 // DEG2RAD keeps the original's constant value.
+// RCut: the glow is scaled by the clip's coverage and no longer raises alpha.
 
 const DREAMY_DEG2RAD: f32 = 0.03926990816987241548078304229099;
 const DREAMY_ROTATION: f32 = 6.0;
@@ -28,5 +29,5 @@ fn transition(uv: vec2f) -> vec4f {
         c = getFromColor(q);
     }
     let glow = select(mix(1.0, 0.0, phase), mix(0.0, 1.0, phase), first_half);
-    return c + glow;
+    return vec4f(c.rgb + glow * c.a, c.a);
 }

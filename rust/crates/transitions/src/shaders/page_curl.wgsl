@@ -4,6 +4,7 @@
 // Copyright (c) 2010 Hewlett-Packard Development Company, L.P. All rights reserved.
 // The full BSD 3-Clause notice is reproduced in THIRD_PARTY_NOTICES.md.
 // (Dead code from the original's behindSurface, whose results were always overwritten, is omitted.)
+// RCut: shadows, the backside tint and alpha are scaled by the clips' coverage.
 
 const CURL_MIN_AMOUNT: f32 = -0.16;
 const CURL_MAX_AMOUNT: f32 = 1.5;
@@ -82,14 +83,15 @@ fn curl_see_through_with_shadow(
         shadow = shadow * curl_amount;
     }
     let shadow_color = curl_see_through(yc, p, rotation, rrotation);
-    return vec4f(shadow_color.rgb - shadow, shadow_color.a);
+    return vec4f(shadow_color.rgb - shadow * shadow_color.a, shadow_color.a);
 }
 
 fn curl_backside(yc: f32, point: vec3f) -> vec4f {
     let color = getFromColor(point.xy);
     var gray = (color.r + color.b + color.g) / 15.0;
     gray = gray + (8.0 / 10.0)
-        * (pow(max(0.0, 1.0 - abs(yc / CURL_CYLINDER_RADIUS)), 2.0 / 10.0) / 2.0 + (5.0 / 10.0));
+        * (pow(max(0.0, 1.0 - abs(yc / CURL_CYLINDER_RADIUS)), 2.0 / 10.0) / 2.0 + (5.0 / 10.0))
+        * color.a;
     return vec4f(vec3f(gray), color.a);
 }
 
@@ -107,7 +109,8 @@ fn curl_behind_surface(p: vec2f, yc_in: f32, point_in: vec3f, rrotation: mat3x3f
         let nyc = -yc / CURL_CYLINDER_RADIUS;
         shado = shado * nyc * nyc * nyc * 0.5;
     }
-    return vec4f(getToColor(p).rgb - shado, 1.0);
+    let to_color = getToColor(p);
+    return vec4f(to_color.rgb - shado * to_color.a, to_color.a);
 }
 
 fn transition(p: vec2f) -> vec4f {
@@ -161,7 +164,7 @@ fn transition(p: vec2f) -> vec4f {
         let dy2 = point.y - 0.5;
         let nyc2 = -yc / CURL_CYLINDER_RADIUS;
         let shado = (1.0 - (sqrt(dx2 * dx2 + dy2 * dy2) / 0.71)) * nyc2 * nyc2 * nyc2 * 0.5;
-        other_color = vec4f(0.0, 0.0, 0.0, shado);
+        other_color = vec4f(0.0, 0.0, 0.0, shado * other_color.a);
     }
     color = curl_anti_alias(color, other_color, CURL_CYLINDER_RADIUS - abs(yc));
 
