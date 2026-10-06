@@ -47,8 +47,13 @@ export const useLutLibrary = create<LutLibraryState>()((set, get) => ({
 
 	load: async () => {
 		if (get().loaded) return;
-		for (const record of await storage.getAll()) {
-			records.set(record.id, record);
+		try {
+			for (const record of await storage.getAll()) {
+				records.set(record.id, record);
+			}
+		} catch (error) {
+			// The library is optional: built-in looks still work, and the editor must still open.
+			console.error("Failed to load the LUT library:", error);
 		}
 		set({ luts: sortedEntries(), loaded: true });
 	},
