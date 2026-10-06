@@ -1,5 +1,6 @@
 import { mediaTimeToSeconds, roundMediaTime, TICKS_PER_SECOND } from "@/wasm";
 import { getElementLocalTime } from "@/animation";
+import { applyMotion } from "@/motion";
 import { resolveEffectParamsAtTime } from "@/animation/effect-param-channel";
 import {
 	buildGaussianBlurPasses,
@@ -177,15 +178,24 @@ function resolveVisualState({
 		elementStartTime: params.timeOffset,
 		elementDuration: params.duration,
 	});
-	const transform = resolveTransformAtTime({
-		baseTransform: params.transform,
-		animations: params.animations,
-		localTime,
-	});
-	const opacity = resolveOpacityAtTime({
-		baseOpacity: params.opacity,
-		animations: params.animations,
-		localTime,
+	const { transform, opacity } = applyMotion({
+		transform: resolveTransformAtTime({
+			baseTransform: params.transform,
+			animations: params.animations,
+			localTime,
+		}),
+		opacity: resolveOpacityAtTime({
+			baseOpacity: params.opacity,
+			animations: params.animations,
+			localTime,
+		}),
+		motion: params.motion,
+		localTime: localTime / TICKS_PER_SECOND,
+		duration: params.duration / TICKS_PER_SECOND,
+		canvas: {
+			width: context.renderer.width,
+			height: context.renderer.height,
+		},
 	});
 	const containScale = Math.min(
 		context.renderer.width / sourceWidth,
@@ -363,8 +373,7 @@ function resolveTextNode({
 		elementDuration: node.params.duration,
 	});
 	const background = buildTextBackgroundFromElement({ element: node.params });
-
-	return {
+	const motioned = applyMotion({
 		transform: resolveTransformAtTime({
 			baseTransform: node.params.transform,
 			animations: node.params.animations,
@@ -375,6 +384,18 @@ function resolveTextNode({
 			animations: node.params.animations,
 			localTime,
 		}),
+		motion: node.params.motion,
+		localTime: localTime / TICKS_PER_SECOND,
+		duration: node.params.duration / TICKS_PER_SECOND,
+		canvas: {
+			width: context.renderer.width,
+			height: context.renderer.height,
+		},
+	});
+
+	return {
+		transform: motioned.transform,
+		opacity: motioned.opacity,
 		textColor: resolveColorAtTime({
 			baseColor:
 				typeof node.params.params.color === "string"

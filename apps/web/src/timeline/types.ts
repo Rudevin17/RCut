@@ -1,6 +1,7 @@
 import type { ElementAnimations } from "@/animation/types";
 import type { Effect } from "@/effects/types";
 import type { Mask } from "@/masks/types";
+import type { ElementMotion } from "@/motion";
 import type { ParamValues } from "@/params";
 import type { TrackTransition } from "@/transitions/types";
 import type { MediaTime } from "@/wasm";
@@ -124,6 +125,7 @@ export interface VideoElement extends BaseTimelineElement {
 	retime?: RetimeConfig;
 	effects?: Effect[];
 	masks?: Mask[];
+	motion?: ElementMotion;
 }
 
 export interface ImageElement extends BaseTimelineElement {
@@ -132,12 +134,14 @@ export interface ImageElement extends BaseTimelineElement {
 	hidden?: boolean;
 	effects?: Effect[];
 	masks?: Mask[];
+	motion?: ElementMotion;
 }
 
 export interface TextElement extends BaseTimelineElement {
 	type: "text";
 	hidden?: boolean;
 	effects?: Effect[];
+	motion?: ElementMotion;
 }
 
 export interface StickerElement extends BaseTimelineElement {
@@ -148,6 +152,7 @@ export interface StickerElement extends BaseTimelineElement {
 	intrinsicHeight?: number;
 	hidden?: boolean;
 	effects?: Effect[];
+	motion?: ElementMotion;
 }
 
 export interface GraphicElement extends BaseTimelineElement {
@@ -156,6 +161,7 @@ export interface GraphicElement extends BaseTimelineElement {
 	hidden?: boolean;
 	effects?: Effect[];
 	masks?: Mask[];
+	motion?: ElementMotion;
 }
 
 export interface EffectElement extends BaseTimelineElement {

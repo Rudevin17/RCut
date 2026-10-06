@@ -9,6 +9,7 @@ import { EditorCore } from "@/core";
 import { isRetimableElement } from "@/timeline";
 import { splitAnimationsAtTime } from "@/animation";
 import { getSourceSpanAtClipTime } from "@/retime";
+import { splitMotion, type ElementMotion } from "@/motion";
 import { moveTransitionsToSplitRightHalves } from "@/transitions/edit";
 import {
 	addMediaTime,
@@ -16,6 +17,19 @@ import {
 	roundMediaTime,
 	subMediaTime,
 } from "@/wasm";
+
+/** Replaces a half's `motion`, dropping the key when the half has none. */
+function withMotion({
+	element,
+	motion,
+}: {
+	element: TimelineElement;
+	motion: ElementMotion | undefined;
+}): TimelineElement {
+	if (!("motion" in element)) return element;
+	const { motion: _inherited, ...rest } = element;
+	return (motion ? { ...rest, motion } : rest) as TimelineElement;
+}
 
 export class SplitElementsCommand extends Command {
 	private savedState: SceneTracks | null = null;
@@ -189,7 +203,16 @@ export class SplitElementsCommand extends Command {
 					];
 				}
 
-				return splitResult;
+				// The left half keeps the original id; the right half always gets a new one.
+				const { left: leftMotion, right: rightMotion } = splitMotion({
+					motion: "motion" in element ? element.motion : undefined,
+				});
+				return splitResult.map((half) =>
+					withMotion({
+						element: half,
+						motion: half.id === element.id ? leftMotion : rightMotion,
+					}),
+				);
 			});
 
 			return { ...track, elements } as TTrack;

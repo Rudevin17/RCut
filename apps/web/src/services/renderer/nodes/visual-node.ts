@@ -1,6 +1,7 @@
 import { BaseNode } from "./base-node";
 import type { Effect, EffectPass } from "@/effects/types";
 import type { Mask } from "@/masks/types";
+import type { ElementMotion } from "@/motion";
 import type { BlendMode, Transform } from "@/rendering";
 import type { RetimeConfig, VisualElement } from "@/timeline";
 
@@ -12,6 +13,7 @@ export interface VisualNodeParams {
 	retime?: RetimeConfig;
 	transform: Transform;
 	animations?: VisualElement["animations"];
+	motion?: ElementMotion;
 	opacity: number;
 	blendMode?: BlendMode;
 	effects?: Effect[];
