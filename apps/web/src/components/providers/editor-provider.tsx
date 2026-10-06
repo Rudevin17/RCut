@@ -15,6 +15,7 @@ import {
 	initializeGpuRenderer,
 	isGpuAvailable,
 } from "@/services/renderer/gpu-renderer";
+import { useLutLibrary } from "@/services/lut-library";
 
 interface EditorProviderProps {
 	projectId: string;
@@ -41,6 +42,7 @@ export function EditorProvider({ projectId, children }: EditorProviderProps) {
 				setIsLoading(true);
 				await initializeGpuRenderer();
 				editor.renderer.setDegraded(!isGpuAvailable());
+				await useLutLibrary.getState().load();
 				await editor.project.loadProject({ id: projectId });
 
 				if (cancelled) return;

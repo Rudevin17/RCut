@@ -4,7 +4,8 @@ import {
 	applyTransition as applyTransitionWasm,
 	initializeGpu,
 } from "opencut-wasm";
-import type { EffectPass, EffectUniformValue } from "@/effects/types";
+import type { EffectPass } from "@/effects/types";
+import { ensureLutsRegistered } from "./compositor/lut-registration";
 
 let gpuAvailable = false;
 let initPromise: Promise<void> | null = null;
@@ -67,6 +68,7 @@ export const gpuRenderer = {
 			return source;
 		}
 
+		ensureLutsRegistered({ passes });
 		return applyEffectPasses({
 			source,
 			width,
@@ -100,15 +102,5 @@ export const gpuRenderer = {
 };
 
 function serializeEffectPasses(passes: EffectPass[]) {
-	return passes.map((pass) => ({
-		shader: pass.shader,
-		uniforms: Object.entries(pass.uniforms).map(([name, value]) => ({
-			name,
-			value: normalizeUniformValue(value),
-		})),
-	}));
-}
-
-function normalizeUniformValue(value: EffectUniformValue): number[] {
-	return typeof value === "number" ? [value] : value;
+	return passes.map(({ shader, params, lut }) => ({ shader, params, lut }));
 }

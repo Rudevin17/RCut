@@ -12,9 +12,12 @@ import {
 	isRenderPerfEnabled,
 	recordWasmFrameProfile,
 } from "@/diagnostics/render-perf";
+import type { EffectPass } from "@/effects/types";
+import { ensureLutsRegistered } from "./lut-registration";
 import type {
 	ExternalTextureDescriptor,
 	FrameDescriptor,
+	FrameItemDescriptor,
 	RenderedTextureDescriptor,
 	TextureUploadDescriptor,
 } from "./types";
@@ -88,6 +91,7 @@ class WasmCompositor {
 	}
 
 	render(frame: FrameDescriptor) {
+		ensureLutsRegistered({ passes: collectEffectPasses({ items: frame.items }) });
 		renderFrame(frame);
 		if (isRenderPerfEnabled()) {
 			recordWasmFrameProfile(
@@ -183,6 +187,24 @@ class WasmCompositor {
 }
 
 export const wasmCompositor = new WasmCompositor();
+
+/** Every effect pass in the frame, including those nested in transitions. */
+function collectEffectPasses({
+	items,
+}: {
+	items: FrameItemDescriptor[];
+}): EffectPass[] {
+	const passes: EffectPass[] = [];
+	for (const item of items) {
+		if (item.type === "transition") {
+			passes.push(...collectEffectPasses({ items: item.fromItems }));
+			passes.push(...collectEffectPasses({ items: item.toItems }));
+		} else {
+			passes.push(...item.effectPassGroups.flat());
+		}
+	}
+	return passes;
+}
 
 function createBackingCanvas({
 	width,

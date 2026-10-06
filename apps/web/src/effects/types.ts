@@ -7,29 +7,29 @@ export interface Effect {
 	enabled: boolean;
 }
 
-export type EffectUniformValue = number | number[];
-
 export interface EffectPass {
 	shader: string;
-	uniforms: Record<string, EffectUniformValue>;
+	/** Shader parameters, packed in the order the shader expects (at most 16). */
+	params: number[];
+	/** Id of a registered 3D LUT the shader samples, if any. */
+	lut?: string;
+}
+
+interface EffectPassArgs {
+	effectParams: ParamValues;
+	width: number;
+	height: number;
 }
 
 export interface EffectPassTemplate {
 	shader: string;
-	uniforms(params: {
-		effectParams: ParamValues;
-		width: number;
-		height: number;
-	}): Record<string, EffectUniformValue>;
+	params(args: EffectPassArgs): number[];
+	lut?(args: EffectPassArgs): string | undefined;
 }
 
 export interface EffectRendererConfig {
 	passes: EffectPassTemplate[];
-	buildPasses?: (params: {
-		effectParams: ParamValues;
-		width: number;
-		height: number;
-	}) => EffectPass[];
+	buildPasses?: (params: EffectPassArgs) => EffectPass[];
 }
 
 export interface EffectDefinition {

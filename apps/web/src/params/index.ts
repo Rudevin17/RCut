@@ -232,13 +232,22 @@ export interface FontParamDefinition<TKey extends string = string>
 	channels?: LeafChannelLayout<string>;
 }
 
+/** Id of a built-in look ("builtin:...") or an imported LUT in the LUT library. */
+export interface LutParamDefinition<TKey extends string = string>
+	extends BaseParamDefinition<TKey> {
+	type: "lut";
+	default: string;
+	channels?: LeafChannelLayout<string>;
+}
+
 export type ParamDefinition<TKey extends string = string> =
 	| NumberParamDefinition<TKey>
 	| BooleanParamDefinition<TKey>
 	| ColorParamDefinition<TKey>
 	| SelectParamDefinition<TKey>
 	| TextParamDefinition<TKey>
-	| FontParamDefinition<TKey>;
+	| FontParamDefinition<TKey>
+	| LutParamDefinition<TKey>;
 
 export function getParamChannelLayout({
 	param,
@@ -255,6 +264,7 @@ export function getParamChannelLayout({
 		case "select":
 		case "text":
 		case "font":
+		case "lut":
 			return param.channels ?? STRING_CHANNEL_LAYOUT;
 		default: {
 			const exhaustive: never = param;
@@ -328,6 +338,7 @@ export function coerceParamValue({
 		case "color":
 		case "text":
 		case "font":
+		case "lut":
 			return typeof value === "string" ? value : null;
 		case "select":
 			return typeof value === "string" &&

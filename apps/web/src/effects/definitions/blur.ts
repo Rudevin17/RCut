@@ -34,21 +34,14 @@ export function buildGaussianBlurPasses({
 
 	const passes: EffectPass[] = [];
 	for (let i = 0; i < iterations; i++) {
+		// params: [sigma, step, dirX, dirY]
 		passes.push({
 			shader: GAUSSIAN_BLUR_SHADER,
-			uniforms: {
-				u_sigma: perPassSigmaX,
-				u_step: stepX,
-				u_direction: [1, 0],
-			},
+			params: [perPassSigmaX, stepX, 1, 0],
 		});
 		passes.push({
 			shader: GAUSSIAN_BLUR_SHADER,
-			uniforms: {
-				u_sigma: perPassSigmaY,
-				u_step: stepY,
-				u_direction: [0, 1],
-			},
+			params: [perPassSigmaY, stepY, 0, 1],
 		});
 	}
 	return passes;
@@ -84,19 +77,21 @@ export const blurEffectDefinition: EffectDefinition = {
 		passes: [
 			{
 				shader: GAUSSIAN_BLUR_SHADER,
-				uniforms: ({ effectParams, width }) => ({
-					u_sigma: Math.max(intensityToSigma({ intensity: parseIntensity(effectParams), resolution: width, reference: 1920 }), 0.001),
-					u_step: 1,
-					u_direction: [1, 0],
-				}),
+				params: ({ effectParams, width }) => [
+					Math.max(intensityToSigma({ intensity: parseIntensity(effectParams), resolution: width, reference: 1920 }), 0.001),
+					1,
+					1,
+					0,
+				],
 			},
 			{
 				shader: GAUSSIAN_BLUR_SHADER,
-				uniforms: ({ effectParams, height }) => ({
-					u_sigma: Math.max(intensityToSigma({ intensity: parseIntensity(effectParams), resolution: height, reference: 1080 }), 0.001),
-					u_step: 1,
-					u_direction: [0, 1],
-				}),
+				params: ({ effectParams, height }) => [
+					Math.max(intensityToSigma({ intensity: parseIntensity(effectParams), resolution: height, reference: 1080 }), 0.001),
+					1,
+					0,
+					1,
+				],
 			},
 		],
 		buildPasses: ({ effectParams, width, height }) => {
