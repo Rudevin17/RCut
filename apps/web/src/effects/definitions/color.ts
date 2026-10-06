@@ -9,6 +9,7 @@ const toneParam = (key: string, label: string): NumberParamDefinition => ({
 	min: -100,
 	max: 100,
 	step: 1,
+	slider: true,
 });
 
 function readNumber({ params, key }: { params: ParamValues; key: string }): number {
@@ -34,7 +35,7 @@ export const colorEffectDefinition: EffectDefinition = {
 	name: "Color",
 	keywords: ["color", "grade", "exposure", "contrast", "saturation", "white balance", "temperature"],
 	params: [
-		{ key: "exposure", label: "Exposure", type: "number", default: 0, min: -4, max: 4, step: 0.05 },
+		{ key: "exposure", label: "Exposure", type: "number", default: 0, min: -4, max: 4, step: 0.05, slider: true },
 		toneParam("contrast", "Contrast"),
 		toneParam("highlights", "Highlights"),
 		toneParam("shadows", "Shadows"),

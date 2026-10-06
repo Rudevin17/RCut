@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import { usePropertyDraft } from "../hooks/use-property-draft";
 import { KeyframeToggle } from "./keyframe-toggle";
+import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
 import { LutParamField } from "./lut-param-field";
 
@@ -218,7 +219,7 @@ function NumberParamField({
 		onCommit();
 	};
 
-	return (
+	const numberField = (
 		<NumberField
 			icon={param.shortLabel}
 			value={draft.displayValue}
@@ -231,5 +232,23 @@ function NumberParamField({
 			onScrubEnd={onCommit}
 			onReset={handleReset}
 		/>
+	);
+
+	if (!param.slider || max === undefined) return numberField;
+
+	return (
+		<div className="flex items-center gap-3">
+			<Slider
+				className="flex-1"
+				aria-label={param.label}
+				value={[displayValue]}
+				min={min}
+				max={max}
+				step={step}
+				onValueChange={([next]) => previewFromDisplay(next)}
+				onValueCommit={() => onCommit()}
+			/>
+			<div className="w-24 shrink-0">{numberField}</div>
+		</div>
 	);
 }

@@ -9,7 +9,7 @@ export const lutEffectDefinition: EffectDefinition = {
 	keywords: ["lut", "look", "cube", "grade", "film", "cinematic"],
 	params: [
 		{ key: "lut", label: "Look", type: "lut", default: DEFAULT_LUT_ID },
-		{ key: "intensity", label: "Intensity", type: "number", default: 100, min: 0, max: 100, step: 1 },
+		{ key: "intensity", label: "Intensity", type: "number", default: 100, min: 0, max: 100, step: 1, slider: true },
 	],
 	renderer: {
 		passes: [],

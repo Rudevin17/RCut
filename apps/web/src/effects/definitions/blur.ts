@@ -71,6 +71,7 @@ export const blurEffectDefinition: EffectDefinition = {
 			min: 0,
 			max: 100,
 			step: 1,
+			slider: true,
 		},
 	],
 	renderer: {

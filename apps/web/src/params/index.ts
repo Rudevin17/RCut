@@ -194,6 +194,8 @@ export interface NumberParamDefinition<TKey extends string = string>
 	unit?: "percent";
 	/** Short label shown as the scrub handle icon in the number field (e.g. "W", "R"). */
 	shortLabel?: string;
+	/** Show a slider next to the number box. Requires `max`. */
+	slider?: boolean;
 }
 
 export interface BooleanParamDefinition<TKey extends string = string>
