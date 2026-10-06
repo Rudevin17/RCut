@@ -17,6 +17,7 @@ import {
 } from "@/wasm";
 import { useKeyframeSelection } from "@/timeline/hooks/element/use-keyframe-selection";
 import { getElementsAtTime, hasMediaId } from "@/timeline";
+import { findAdjacentKeyframeTime } from "@/motion/keyframe-tools";
 import { cancelInteraction } from "@/editor/cancel-interaction";
 import { invokeAction } from "@/actions";
 import { canToggleSourceAudio } from "@/timeline/audio-separation";
@@ -450,6 +451,42 @@ export function useEditorActions() {
 		() => {
 			editor.scenes.toggleBookmark({ time: editor.playback.getCurrentTime() });
 		},
+		undefined,
+	);
+
+	const seekToAdjacentKeyframe = (direction: "previous" | "next") => {
+		if (selectedElements.length !== 1) return;
+		const selected = editor.timeline.getElementsWithTracks({
+			elements: selectedElements,
+		})[0];
+		if (!selected) return;
+		const { element } = selected;
+		const localKeyTime = findAdjacentKeyframeTime({
+			animations: element.animations,
+			localTime: subMediaTime({
+				a: editor.playback.getCurrentTime(),
+				b: element.startTime,
+			}),
+			direction,
+		});
+		if (localKeyTime === null) return;
+		editor.playback.seek({
+			time: addMediaTime({
+				a: element.startTime,
+				b: mediaTime({ ticks: localKeyTime }),
+			}),
+		});
+	};
+
+	useActionHandler(
+		"keyframe-previous",
+		() => seekToAdjacentKeyframe("previous"),
+		undefined,
+	);
+
+	useActionHandler(
+		"keyframe-next",
+		() => seekToAdjacentKeyframe("next"),
 		undefined,
 	);
 

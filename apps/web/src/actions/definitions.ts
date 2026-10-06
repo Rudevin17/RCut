@@ -130,6 +130,14 @@ export const ACTIONS = {
 		description: "Toggle bookmark at playhead",
 		category: "timeline",
 	},
+	"keyframe-previous": {
+		description: "Go to previous keyframe",
+		category: "navigation",
+	},
+	"keyframe-next": {
+		description: "Go to next keyframe",
+		category: "navigation",
+	},
 	undo: {
 		description: "Undo",
 		category: "history",
@@ -180,6 +188,8 @@ const ACTION_DEFAULT_SHORTCUTS = [
 	["copy-selected", ["ctrl+c"]],
 	["paste-copied", ["ctrl+v"]],
 	["toggle-snapping", ["n"]],
+	["keyframe-previous", ["["]],
+	["keyframe-next", ["]"]],
 	["select-all", ["ctrl+a"]],
 	["cancel-interaction", ["escape"]],
 	["duplicate-selected", ["ctrl+d"]],

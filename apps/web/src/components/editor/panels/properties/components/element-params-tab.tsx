@@ -4,6 +4,7 @@ import { resolveAnimationPathValueAtTime } from "@/animation";
 import { Section, SectionContent, SectionFields } from "@/components/section";
 import { useElementPlayhead } from "@/components/editor/panels/properties/hooks/use-element-playhead";
 import { useKeyframedParamProperty } from "@/components/editor/panels/properties/hooks/use-keyframed-param-property";
+import { KeyframeAllControls } from "@/components/editor/panels/properties/components/keyframe-all-controls";
 import { PropertyParamField } from "@/components/editor/panels/properties/components/property-param-field";
 import type { ParamValue, ParamValues } from "@/params";
 import {
@@ -38,6 +39,14 @@ export function ElementParamsTab({
 	return (
 		<Section sectionKey={`${element.id}:${sectionKey}`}>
 			<SectionContent className="pt-4">
+				{sectionKey === "transform" && (
+					<KeyframeAllControls
+						element={element}
+						trackId={trackId}
+						localTime={localTime}
+						isPlayheadWithinElementRange={isPlayheadWithinElementRange}
+					/>
+				)}
 				<SectionFields>
 					{params
 						.filter((param) => isVisible({ param, values: baseValues }))
