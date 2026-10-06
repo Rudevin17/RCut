@@ -112,7 +112,7 @@ With every value at its default, the effect must leave the image unchanged, apar
 
 ### 3. GPU pipeline (Rust)
 
-**Shader registry.** `EFFECT_SHADERS: [(&str, &str)]` lists `gaussian-blur`, `color-adjust` and `lut-3d`, following the transitions pattern. Pipelines are created the first time each shader is used and then cached.
+**Shader registry.** `EFFECT_SHADERS: [(&str, &str)]` lists `gaussian-blur`, `color-adjust` and `lut-3d`, following the transitions pattern. One render pipeline is created per registered shader when the `EffectPipeline` is created. There are only three shaders, so creating them all up front is cheap and keeps `apply()` free of interior mutability.
 
 **Uniform buffer:**
 ```
