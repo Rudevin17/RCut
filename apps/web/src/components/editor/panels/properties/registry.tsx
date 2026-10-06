@@ -21,11 +21,13 @@ import {
 	MusicNote03Icon,
 	MagicWand05Icon,
 	DashboardSpeed02Icon,
+	Motion01Icon,
 } from "@hugeicons/core-free-icons";
 import { ElementParamsTab } from "./components/element-params-tab";
 import { ClipEffectsTab, StandaloneEffectTab } from "@/effects/components/effects-tab";
 import { MasksTab } from "@/masks/components/masks-tab";
 import { SpeedTab } from "@/speed/components/speed-tab";
+import { AnimationTab } from "@/motion/components/animation-tab";
 import { GraphicTab } from "@/graphics/components/graphic-tab";
 import { OcShapesIcon } from "@/components/icons";
 
@@ -91,6 +93,21 @@ function buildTransformTab({
 				paramKeys={TRANSFORM_PARAM_KEYS}
 				sectionKey="transform"
 			/>
+		),
+	};
+}
+
+function buildAnimationTab({
+	element,
+}: {
+	element: VisualElement;
+}): PropertiesTabDef {
+	return {
+		id: "animation",
+		label: "Animation",
+		icon: <HugeiconsIcon icon={Motion01Icon} size={16} />,
+		content: ({ trackId }) => (
+			<AnimationTab element={element} trackId={trackId} />
 		),
 	};
 }
@@ -230,6 +247,7 @@ function getTextConfig({
 		tabs: [
 			buildTextTab({ element }),
 			buildTransformTab({ element }),
+				buildAnimationTab({ element }),
 			buildBlendingTab({ element }),
 		],
 	};
@@ -247,6 +265,7 @@ function getVideoConfig({
 		defaultTab: "transform",
 		tabs: [
 			buildTransformTab({ element }),
+				buildAnimationTab({ element }),
 			...(showAudioTab ? [buildAudioTab({ element })] : []),
 			buildSpeedTab({ element }),
 			buildBlendingTab({ element }),
@@ -265,6 +284,7 @@ function getImageConfig({
 		defaultTab: "transform",
 		tabs: [
 			buildTransformTab({ element }),
+				buildAnimationTab({ element }),
 			buildBlendingTab({ element }),
 			buildMasksTab({ element }),
 			buildClipEffectsTab({ element }),
@@ -281,6 +301,7 @@ function getStickerConfig({
 		defaultTab: "transform",
 		tabs: [
 			buildTransformTab({ element }),
+				buildAnimationTab({ element }),
 			buildBlendingTab({ element }),
 			buildClipEffectsTab({ element }),
 		],
@@ -297,6 +318,7 @@ function getGraphicConfig({
 		tabs: [
 			buildGraphicTab({ element }),
 			buildTransformTab({ element }),
+				buildAnimationTab({ element }),
 			buildBlendingTab({ element }),
 			buildMasksTab({ element }),
 			buildClipEffectsTab({ element }),

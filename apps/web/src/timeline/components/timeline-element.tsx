@@ -50,6 +50,7 @@ import {
 } from "@/timeline/audio-separation";
 import { buildWaveformGainSamples, isElementMuted } from "@/timeline/audio-state";
 import { getTimelinePixelsPerSecond } from "@/timeline";
+import { resolveMotionPhases } from "@/motion";
 import { buildWaveformSourceKey } from "@/media/waveform-summary";
 import { addMediaTime, type MediaTime, TICKS_PER_SECOND } from "@/wasm";
 import {
@@ -278,6 +279,20 @@ export function TimelineElement({
 		time: displayedStartTime,
 		zoomLevel,
 	});
+	const motion = "motion" in renderElement ? renderElement.motion : undefined;
+	const motionBands =
+		motion?.in || motion?.out
+			? (() => {
+					const { inDur, outDur } = resolveMotionPhases({
+						motion,
+						duration: displayedDuration / TICKS_PER_SECOND,
+					});
+					return {
+						inPx: motion.in ? inDur * timelinePixelsPerSecond : 0,
+						outPx: motion.out ? outDur * timelinePixelsPerSecond : 0,
+					};
+				})()
+			: null;
 	const keyframeIndicators = isSelected
 		? getKeyframeIndicators({
 				keyframes: getElementKeyframes({ animations: element.animations }),
@@ -409,6 +424,25 @@ export function TimelineElement({
 							onResizeStart={onResizeStart}
 							isDropTarget={isDropTarget}
 						/>
+						{motionBands && (
+							<div
+								className="pointer-events-none absolute inset-x-0 top-0"
+								style={{ height: `${baseTrackHeight}px` }}
+							>
+								{motionBands.inPx > 0 && (
+									<div
+										className="absolute inset-y-0 left-0 rounded-l-sm bg-primary/30"
+										style={{ width: `${motionBands.inPx}px` }}
+									/>
+								)}
+								{motionBands.outPx > 0 && (
+									<div
+										className="absolute inset-y-0 right-0 rounded-r-sm bg-primary/30"
+										style={{ width: `${motionBands.outPx}px` }}
+									/>
+								)}
+							</div>
+						)}
 						{isSelected && (
 							<div
 								className="pointer-events-none absolute inset-x-0 top-0 overflow-hidden"
