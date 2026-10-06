@@ -1,31 +1,24 @@
-import { describe, expect, mock, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
+import type { ParamValues } from "@/params";
+import type { EffectDefinition, EffectPass } from "@/effects/types";
+import { colorEffectDefinition } from "@/effects/definitions/color";
+import { lutEffectDefinition } from "@/effects/definitions/lut";
+import { blurEffectDefinition } from "@/effects/definitions/blur";
 
-// `@/effects` and `@/params/registry` reach `opencut-wasm` through `@/timeline` -> `@/wasm`,
-// which bun can't load (wasm ESM integration). Stub what runs at import time.
-const TICKS_PER_SECOND = 120_000;
-mock.module("opencut-wasm", () => ({
-	TICKS_PER_SECOND: () => TICKS_PER_SECOND,
-	mediaTimeFromSeconds: ({ seconds }: { seconds: number }) => Math.round(seconds * TICKS_PER_SECOND),
-	mediaTimeToSeconds: ({ time }: { time: number }) => time / TICKS_PER_SECOND,
-	roundToFrame: () => undefined,
-	snappedSeekTime: () => undefined,
-	lastFrameTime: () => undefined,
-	parseTimecode: () => undefined,
-}));
-
-const { buildDefaultParamValues } = await import("@/params/registry");
-const { resolveEffectPasses } = await import("@/effects");
-const { colorEffectDefinition } = await import("@/effects/definitions/color");
-const { lutEffectDefinition } = await import("@/effects/definitions/lut");
-const { blurEffectDefinition } = await import("@/effects/definitions/blur");
-
-const resolve = (definition: typeof colorEffectDefinition, params = {}) =>
-	resolveEffectPasses({
-		definition,
-		effectParams: { ...buildDefaultParamValues(definition.params), ...params },
-		width: 1920,
-		height: 1080,
+// `@/effects` and `@/params/registry` reach `opencut-wasm`, which bun can't load,
+// so this mirrors `buildDefaultParamValues` and `resolveEffectPasses` locally.
+const resolve = (definition: EffectDefinition, params: ParamValues = {}): EffectPass[] => {
+	const effectParams: ParamValues = {
+		...Object.fromEntries(definition.params.map((param) => [param.key, param.default])),
+		...params,
+	};
+	const args = { effectParams, width: 1920, height: 1080 };
+	if (definition.renderer.buildPasses) return definition.renderer.buildPasses(args);
+	return definition.renderer.passes.map((pass) => {
+		const lut = pass.lut?.(args);
+		return { shader: pass.shader, params: pass.params(args), ...(lut ? { lut } : {}) };
 	});
+};
 
 describe("color effect", () => {
 	test("defaults are a no-op pass", () => {
