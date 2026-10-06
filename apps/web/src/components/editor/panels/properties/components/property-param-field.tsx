@@ -24,6 +24,7 @@ import {
 import { usePropertyDraft } from "../hooks/use-property-draft";
 import { KeyframeToggle } from "./keyframe-toggle";
 import { Textarea } from "@/components/ui/textarea";
+import { LutParamField } from "./lut-param-field";
 
 export function PropertyParamField({
 	param,
@@ -153,6 +154,16 @@ function ParamInput({
 				value={String(value)}
 				onChange={(event) => onPreview(event.currentTarget.value)}
 				onBlur={onCommit}
+			/>
+		);
+	}
+
+	if (param.type === "lut") {
+		return (
+			<LutParamField
+				value={String(value)}
+				onPreview={onPreview}
+				onCommit={onCommit}
 			/>
 		);
 	}
