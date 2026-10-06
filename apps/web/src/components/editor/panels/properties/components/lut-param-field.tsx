@@ -88,7 +88,13 @@ export function LutParamField({
 						variant="ghost"
 						size="icon"
 						aria-label={`Remove ${selected.name} from library`}
-						onClick={() => void remove({ id: value })}
+						onClick={() =>
+							remove({ id: value }).catch((error) =>
+								toast.error("Couldn't remove LUT", {
+									description: error instanceof Error ? error.message : String(error),
+								}),
+							)
+						}
 					>
 						<HugeiconsIcon icon={Delete02Icon} />
 					</Button>
