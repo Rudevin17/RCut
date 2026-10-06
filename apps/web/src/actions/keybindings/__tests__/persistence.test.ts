@@ -50,6 +50,24 @@ describe("keybinding persistence", () => {
 		expect(warnSpy).not.toHaveBeenCalled();
 	});
 
+	test("adds the keyframe navigation keys to v7 keybindings without overriding user bindings", () => {
+		const fresh = migratePersistedKeybindingsState({
+			state: { keybindings: { space: "toggle-play" }, isCustomized: false },
+			fromVersion: 7,
+		});
+		const taken = migratePersistedKeybindingsState({
+			state: { keybindings: { "[": "split-left" }, isCustomized: true },
+			fromVersion: 7,
+		});
+
+		const freshDecoded = decodePersistedKeybindingsState({ state: fresh });
+		const takenDecoded = decodePersistedKeybindingsState({ state: taken });
+		expect(freshDecoded?.keybindings.get("[")).toBe("keyframe-previous");
+		expect(freshDecoded?.keybindings.get("]")).toBe("keyframe-next");
+		expect(takenDecoded?.keybindings.get("[")).toBe("split-left");
+		expect(takenDecoded?.keybindings.get("]")).toBe("keyframe-next");
+	});
+
 	test("filters invalid persisted entries at the boundary and warns", () => {
 		const decoded = decodePersistedKeybindingsState({
 			state: {
