@@ -177,17 +177,23 @@ export function AnimationTab({
 			duration: clipSeconds,
 		});
 		const startSeconds = mediaTimeToSeconds({ time: element.startTime });
+		const endSeconds = startSeconds + clipSeconds;
 		let seekSeconds: number;
 		let waitSeconds: number;
 		if (pickedSlot === "in") {
 			seekSeconds = startSeconds;
 			waitSeconds = inDur + PLAYBACK_MARGIN_SECONDS;
 		} else if (pickedSlot === "out") {
-			seekSeconds =
-				startSeconds + clipSeconds - outDur - PLAYBACK_MARGIN_SECONDS;
-			waitSeconds = outDur + PLAYBACK_MARGIN_SECONDS;
+			seekSeconds = Math.max(
+				startSeconds,
+				endSeconds - outDur - PLAYBACK_MARGIN_SECONDS,
+			);
+			waitSeconds = endSeconds - seekSeconds;
 		} else {
-			seekSeconds = mediaTimeToSeconds({ time: originalTime });
+			const playheadSeconds = mediaTimeToSeconds({ time: originalTime });
+			const isInsideClip =
+				playheadSeconds >= startSeconds && playheadSeconds < endSeconds;
+			seekSeconds = isInsideClip ? playheadSeconds : startSeconds;
 			waitSeconds = COMBO_PREVIEW_SECONDS;
 		}
 
@@ -201,6 +207,11 @@ export function AnimationTab({
 	};
 
 	const pick = ({ presetId }: { presetId: string | null }) => {
+		// Re-picking the selected preset only replays it, so it adds no undo step.
+		if (presetId === (current?.preset ?? null)) {
+			if (presetId && motion) playPreview({ slot, motion });
+			return;
+		}
 		const next = setSlot({
 			motion,
 			slot,
