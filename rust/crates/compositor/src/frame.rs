@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
 
 use crate::BlendMode;
@@ -77,14 +75,9 @@ pub struct LayerMaskDescriptor {
 #[serde(rename_all = "camelCase")]
 pub struct EffectPassDescriptor {
     pub shader: String,
-    pub uniforms: HashMap<String, EffectUniformValueDescriptor>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(untagged)]
-pub enum EffectUniformValueDescriptor {
-    Number(f32),
-    Vector(Vec<f32>),
+    pub params: Vec<f32>,
+    #[serde(default)]
+    pub lut: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

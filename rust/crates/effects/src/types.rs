@@ -1,13 +1,8 @@
-use std::collections::HashMap;
+pub const MAX_EFFECT_PARAMS: usize = 16;
 
 #[derive(Clone, Debug)]
 pub struct EffectPass {
     pub shader: String,
-    pub uniforms: HashMap<String, UniformValue>,
-}
-
-#[derive(Clone, Debug)]
-pub enum UniformValue {
-    Number(f32),
-    Vector(Vec<f32>),
+    pub params: Vec<f32>,
+    pub lut: Option<String>,
 }

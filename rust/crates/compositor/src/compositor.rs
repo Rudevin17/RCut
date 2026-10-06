@@ -1,5 +1,5 @@
 use bytemuck::{Pod, Zeroable};
-use effects::{ApplyEffectsOptions, EffectPass, EffectPipeline, UniformValue};
+use effects::{ApplyEffectsOptions, EffectPass, EffectPipeline};
 use gpu::{FULLSCREEN_SHADER_SOURCE, GpuContext, wgpu};
 use masks::{ApplyMaskFeatherOptions, MaskFeatherPipeline};
 use thiserror::Error;
@@ -9,8 +9,8 @@ use wgpu::util::DeviceExt;
 use crate::{
     BlendMode,
     frame::{
-        EffectPassDescriptor, EffectUniformValueDescriptor, FrameDescriptor, FrameItemDescriptor,
-        LayerDescriptor, TransitionDescriptor,
+        EffectPassDescriptor, FrameDescriptor, FrameItemDescriptor, LayerDescriptor,
+        TransitionDescriptor,
     },
     texture_pool::TexturePool,
     texture_store::TextureStore,
@@ -291,6 +291,14 @@ impl Compositor {
 
     pub fn release_texture(&mut self, id: &str) {
         self.textures.remove(id);
+    }
+
+    pub fn register_lut(&mut self, context: &GpuContext, id: &str, size: u32, data: &[f32]) {
+        self.effects.register_lut(context, id, size, data);
+    }
+
+    pub fn has_lut(&self, id: &str) -> bool {
+        self.effects.has_lut(id)
     }
 
     /// Composites all frame items into a texture and returns it.
@@ -887,17 +895,8 @@ fn map_effect_passes(passes: &[EffectPassDescriptor]) -> Vec<EffectPass> {
         .iter()
         .map(|pass| EffectPass {
             shader: pass.shader.clone(),
-            uniforms: pass
-                .uniforms
-                .iter()
-                .map(|(name, value)| {
-                    let uniform_value = match value {
-                        EffectUniformValueDescriptor::Number(n) => UniformValue::Number(*n),
-                        EffectUniformValueDescriptor::Vector(v) => UniformValue::Vector(v.clone()),
-                    };
-                    (name.clone(), uniform_value)
-                })
-                .collect(),
+            params: pass.params.clone(),
+            lut: pass.lut.clone(),
         })
         .collect()
 }
